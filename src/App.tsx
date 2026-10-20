@@ -1,0 +1,74 @@
+import React from 'react';
+import { WalletProvider, useWallet } from './context/WalletContext';
+import { Header } from './components/Header';
+import { LandingPage } from './components/LandingPage';
+import { UserDashboard } from './components/UserDashboard';
+import { MarketsView } from './components/MarketsView';
+import { SwapView } from './components/SwapView';
+import { StakingView } from './components/StakingView';
+import { NftGalleryView } from './components/NftGalleryView';
+import { DefiView } from './components/DefiView';
+import { SettingsView } from './components/SettingsView';
+import { TransactionsView } from './components/TransactionsView';
+import { AdminDashboard } from './components/AdminDashboard';
+import { OverviewDashboard } from './components/OverviewDashboard';
+import { AuthModal } from './components/AuthModal';
+import { SendReceiveModal } from './components/SendReceiveModal';
+import { Web3ConnectModal } from './components/Web3ConnectModal';
+import { NotificationDrawer } from './components/NotificationDrawer';
+import { MobileBottomNav } from './components/MobileBottomNav';
+
+const MainContent: React.FC = () => {
+  const { activeTab, theme, currentUser } = useWallet();
+
+  const isAdminAuthorized =
+    currentUser?.email.toLowerCase() === 'legendxadmin1999@gmail.com' &&
+    currentUser?.role === 'admin';
+
+  return (
+    <div className="min-h-screen bg-[#0A0A0D] text-slate-100 font-sans">
+      <Header />
+
+      {/* Account Frozen Alert Banner */}
+      {currentUser?.isFrozen && (
+        <div className="bg-rose-900/90 border-b border-rose-500/50 px-4 py-3 text-white text-xs sm:text-sm font-semibold text-center flex items-center justify-center gap-2 shadow-lg backdrop-blur-md sticky top-16 z-30">
+          <span className="flex h-3 w-3 relative shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+          </span>
+          <span>
+            <strong>Account Verification Notice:</strong> Fraudulent payment activity detected on this account. SafePal compliance teams are currently verifying your transactions. Account features are restricted until review is finalized.
+          </span>
+        </div>
+      )}
+
+      <main className="pb-28 md:pb-12">
+        {activeTab === 'overview' && <OverviewDashboard />}
+        {activeTab === 'landing' && <LandingPage />}
+        {activeTab === 'portfolio' && <UserDashboard />}
+        {activeTab === 'markets' && <MarketsView />}
+        {activeTab === 'swap' && <SwapView />}
+        {activeTab === 'staking' && <StakingView />}
+        {activeTab === 'history' && <TransactionsView />}
+        {activeTab === 'nft' && <NftGalleryView />}
+        {activeTab === 'defi' && <DefiView />}
+        {activeTab === 'settings' && <SettingsView />}
+        {activeTab === 'admin' && (isAdminAuthorized ? <AdminDashboard /> : <OverviewDashboard />)}
+      </main>
+
+      <AuthModal />
+      <SendReceiveModal />
+      <Web3ConnectModal />
+      <NotificationDrawer />
+      <MobileBottomNav />
+    </div>
+  );
+};
+
+export default function App() {
+  return (
+    <WalletProvider>
+      <MainContent />
+    </WalletProvider>
+  );
+}

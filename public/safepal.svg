@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="spGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3862FB" />
+      <stop offset="100%" stop-color="#1E3EA8" />
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="24" fill="#0E121B" />
+  <g transform="translate(14, 14) scale(0.72)">
+    <!-- SafePal geometric polygon shield with S ribbon -->
+    <path
+      d="M50 4 L90 26 L90 74 L50 96 L10 74 L10 26 Z"
+      fill="url(#spGrad)"
+    />
+    <path
+      d="M50 16 L78 32 L78 68 L50 84 L22 68 L22 32 Z"
+      fill="#0B0E14"
+    />
+    <path
+      d="M50 26 L68 37 L68 50 L50 60 L32 50 L32 37 Z"
+      fill="#3862FB"
+    />
+    <path
+      d="M50 34 L60 41 L50 48 L40 41 Z"
+      fill="#FFFFFF"
+    />
+    <path
+      d="M50 52 L60 59 L50 66 L40 59 Z"
+      fill="#FFFFFF"
+    />
+  </g>
+</svg>

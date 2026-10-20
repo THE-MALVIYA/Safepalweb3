@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .bg-safepal-dark, .bg-trustpro-dark, .bg-binance-dark, .bg-trust-dark {
+    background-color: #0B0E14;
+  }
+  .bg-safepal-secondary, .bg-trustpro-secondary, .bg-trust-secondary {
+    background-color: #121622;
+  }
+  .bg-safepal-card, .bg-trustpro-card, .bg-binance-card, .bg-trust-card {
+    background-color: #161B28;
+  }
+  .bg-safepal-pill, .bg-trust-pill {
+    background-color: #181D2A;
+  }
+  .bg-safepal-blue, .bg-trust-blue {
+    background-color: #3862FB;
+  }
+  .text-safepal-blue, .text-trust-blue {
+    color: #3862FB;
+  }
+  .border-safepal, .border-trust {
+    border-color: #1E2536;
+  }
+
+  /* Glassmorphism card utility */
+  .glass-card {
+    background: #121622;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+    border-radius: 20px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card:hover {
+    border-color: rgba(56, 98, 251, 0.35);
+    box-shadow: 0 14px 35px -10px rgba(56, 98, 251, 0.2);
+  }
+
+  /* Trust Royal Blue Button */
+  .btn-gradient-primary, .btn-trust-blue {
+    background: #3862FB;
+    color: #FFFFFF;
+    font-weight: 700;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px 0 rgba(56, 98, 251, 0.35);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .btn-gradient-primary:hover, .btn-trust-blue:hover {
+    background: #2D54E5;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 28px 0 rgba(56, 98, 251, 0.5);
+  }
+
+  /* Secondary Dark Navy Button */
+  .btn-secondary-dark {
+    background-color: #181D2A;
+    border: 1px solid #232A3B;
+    color: #FFFFFF;
+    font-weight: 700;
+    border-radius: 14px;
+    transition: all 0.2s ease-in-out;
+  }
+  .btn-secondary-dark:hover {
+    background-color: #202738;
+    border-color: #2C3549;
+  }
+
+  /* Hide scrollbar utility */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+body {
+  background-color: #0B0E14;
+  color: #FFFFFF;
+  font-family: 'Inter', 'Manrope', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: flex;
+  width: 200%;
+  animation: marquee 35s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
