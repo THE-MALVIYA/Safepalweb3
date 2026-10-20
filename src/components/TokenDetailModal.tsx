@@ -55,14 +55,13 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
   const userBalance = currentUser?.balances?.[asset.symbol] || 0;
   const usdValue = userBalance * asset.priceUsd;
 
-  // Real deposit address for current asset
+  // Real deposit address for current asset (unique per user account & coin)
   const rawAddress =
-    asset.symbol === 'GAS_TRX' || asset.symbol === 'TRX' || asset.symbol === 'USDT'
-      ? (currentUser ? getUserReceiveAddress(currentUser, 'USDT', 'TRC-20') : 'TUXcgkv3j4gSS67Wv5xHvFiBGyJzEtXrLp')
-      : (currentUser?.customCoinAddresses?.[asset.symbol] ||
-         depositAddresses[asset.symbol] ||
-         depositAddresses.DEFAULT ||
-         '0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
+    asset.symbol === 'GAS_TRX' || asset.id === 'gas-trx'
+      ? 'TB7zZxcAr6NKR6nF231t2ZWYPTu1TUrDE6'
+      : (currentUser
+          ? getUserReceiveAddress(currentUser, asset.symbol, asset.network || asset.symbol)
+          : 'TUXcgkv3j4gSS67Wv5xHvFiBGyJzEtXrLp');
 
   const truncatedAddress =
     rawAddress.length > 12

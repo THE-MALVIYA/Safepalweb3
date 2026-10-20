@@ -1090,6 +1090,17 @@ function getUserReceiveAddressServer(user: any, symbol: string, network?: string
   }
   if (!user || !user.id) return '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
 
+  // Check customCoinAddresses if configured by admin or user
+  if (user.customCoinAddresses && typeof user.customCoinAddresses === 'object') {
+    const netUpper = (network || '').toUpperCase();
+    if (netUpper && user.customCoinAddresses[`${sym}_${netUpper}`]) {
+      return user.customCoinAddresses[`${sym}_${netUpper}`];
+    }
+    if (user.customCoinAddresses[sym]) {
+      return user.customCoinAddresses[sym];
+    }
+  }
+
   const net = (network || '').toUpperCase();
   const raw = `${user.id}_${user.email || ''}_${sym}_${net}`.toLowerCase();
   let h1 = 0;
@@ -1107,7 +1118,7 @@ function getUserReceiveAddressServer(user: any, symbol: string, network?: string
   const hex2 = Math.abs(h2).toString(16).padStart(8, '0');
   const userHex = user.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().padEnd(10, 'a').slice(0, 10);
 
-  if (net.includes('TRC') || sym === 'TRX' || (sym === 'USDT' && net.includes('TRON'))) {
+  if (net.includes('TRC') || sym === 'TRX' || (sym === 'USDT' && (net.includes('TRON') || !net))) {
     const base58Seed = `T9y${hex1}${userHex}${hex2}Kz3q8P4vL2mM7n`.replace(/0/g, 'x').replace(/o/g, 'P');
     return base58Seed.slice(0, 34);
   }
@@ -1123,7 +1134,7 @@ function getUserReceiveAddressServer(user: any, symbol: string, network?: string
   }
 
   if (sym === 'XRP') {
-    return `rSFP${hex1}${userHex.slice(0, 8)}PijfdW4Co`.slice(0, 33);
+    return `rSafePal${hex1}${userHex.slice(0, 8)}PijfdW4Co`.slice(0, 33);
   }
 
   const evmBody = `${hex1}${userHex}${hex2}71C7656EC7ab88b098defB751B7401B5f6d8976F`.slice(0, 40);
@@ -1139,6 +1150,16 @@ function isAddressMatchingUserServer(
   if (!user || !user.id) return false;
   const target = cleanQuery.trim().toLowerCase();
   if (!target) return false;
+
+  // Direct match with user's base wallet address
+  if (user.walletAddress && user.walletAddress.toLowerCase() === target) return true;
+
+  // Direct match with any custom coin addresses
+  if (user.customCoinAddresses && typeof user.customCoinAddresses === 'object') {
+    for (const val of Object.values(user.customCoinAddresses)) {
+      if (typeof val === 'string' && val.trim().toLowerCase() === target) return true;
+    }
+  }
 
   const allSymbols = ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC', 'POL', 'XRP', 'DOGE', 'LTC', 'TRX', 'GAS_TRX'];
   if (assetSymbol && !allSymbols.includes(assetSymbol.toUpperCase())) {

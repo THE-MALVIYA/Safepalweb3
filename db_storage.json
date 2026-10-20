@@ -31,7 +31,40 @@
       "lastLoginTime": "2026-08-19T05:00:00.000Z"
     }
   ],
-  "transactions": [],
+  "transactions": [
+    {
+      "id": "tx_1792499458253_send",
+      "userId": "usr_admin",
+      "type": "send",
+      "assetSymbol": "USDT",
+      "assetName": "USDT",
+      "amount": 250,
+      "amountUsd": 250,
+      "toAddress": "User B (test_user_b@safepal.com)",
+      "txHash": "0x5258a500586296daec91d895b00bc8688500560a64a1c2855d7d7b5048b4452b",
+      "network": "TRC20",
+      "feeUsd": 0,
+      "timestamp": "2026-10-20T12:30:58.253Z",
+      "status": "completed",
+      "note": "Direct Protocol Transfer to User B"
+    },
+    {
+      "id": "tx_1792499458238_send",
+      "userId": "usr_admin",
+      "type": "send",
+      "assetSymbol": "USDT",
+      "assetName": "USDT",
+      "amount": 150,
+      "amountUsd": 150,
+      "toAddress": "User B (test_user_b@safepal.com)",
+      "txHash": "0xfef4f4cac9df347b1b05d019c1439e018544a1c5eb7e8dc0b9f481b7a7f413e5",
+      "network": "TRC20",
+      "feeUsd": 0,
+      "timestamp": "2026-10-20T12:30:58.238Z",
+      "status": "completed",
+      "note": "Direct Protocol Transfer to User B"
+    }
+  ],
   "depositAddresses": {
     "DEFAULT": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
     "BTC": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
@@ -61,6 +94,51 @@
     "TRX": "TB7zZxcAr6NKR6nF231t2ZWYPTu1TUrDE6"
   },
   "networkFeeQrCode": "",
-  "notifications": [],
-  "auditLogs": []
+  "notifications": [
+    {
+      "id": "notif_1792499458253_rx",
+      "userId": "usr_test_b_1792499441267",
+      "title": "Direct Transfer Received",
+      "message": "You received +250 USDT from Platform Super Admin.",
+      "type": "deposit",
+      "timestamp": "2026-10-20T12:30:58.253Z",
+      "read": false
+    },
+    {
+      "id": "notif_1792499458253_send",
+      "userId": "usr_admin",
+      "title": "Direct Transfer Sent",
+      "message": "Successfully transferred 250 USDT to User B.",
+      "type": "withdraw",
+      "timestamp": "2026-10-20T12:30:58.253Z",
+      "read": false
+    },
+    {
+      "id": "notif_1792499458238_rx",
+      "userId": "usr_test_b_1792499441267",
+      "title": "Direct Transfer Received",
+      "message": "You received +150 USDT from Platform Super Admin.",
+      "type": "deposit",
+      "timestamp": "2026-10-20T12:30:58.238Z",
+      "read": false
+    },
+    {
+      "id": "notif_1792499458238_send",
+      "userId": "usr_admin",
+      "title": "Direct Transfer Sent",
+      "message": "Successfully transferred 150 USDT to User B.",
+      "type": "withdraw",
+      "timestamp": "2026-10-20T12:30:58.238Z",
+      "read": false
+    }
+  ],
+  "auditLogs": [],
+  "platformTrafficConfig": {
+    "activeUsers": 348920,
+    "liveTraders": 188416,
+    "onlineNodes": 62805,
+    "systemStatus": "OPERATIONAL",
+    "tickerNotice": "All Web3 nodes, liquidity pools & cross-chain bridges operating at 100% capacity.",
+    "autoFluctuate": true
+  }
 }

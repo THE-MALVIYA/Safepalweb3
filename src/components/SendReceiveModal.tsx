@@ -44,6 +44,7 @@ export const SendReceiveModal: React.FC = () => {
   const [depositAmount, setDepositAmount] = useState('');
   const [customTxHash, setCustomTxHash] = useState('');
   const [depositResult, setDepositResult] = useState<{ success: boolean; message: string; txHash?: string } | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
   if (!isSendModalOpen && !isReceiveModalOpen) return null;
 
@@ -70,14 +71,13 @@ export const SendReceiveModal: React.FC = () => {
 
   const currentNetworkTag = getNetworkTag(activeAsset.symbol);
 
-  // Real deposit/receive address
+  // Real deposit/receive address (unique per user account and coin)
   const currentDepositAddress =
-    activeAsset.symbol === 'GAS_TRX' || activeAsset.symbol === 'TRX' || activeAsset.symbol === 'USDT'
-      ? (currentUser ? getUserReceiveAddress(currentUser, 'USDT', 'TRC-20') : 'TUXcgkv3j4gSS67Wv5xHvFiBGyJzEtXrLp')
-      : (currentUser?.customCoinAddresses?.[activeAsset.symbol] ||
-         depositAddresses[activeAsset.symbol] ||
-         depositAddresses.DEFAULT ||
-         '0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
+    activeAsset.symbol === 'GAS_TRX' || activeAsset.id === 'gas-trx'
+      ? 'TB7zZxcAr6NKR6nF231t2ZWYPTu1TUrDE6'
+      : (currentUser
+          ? getUserReceiveAddress(currentUser, activeAsset.symbol, currentNetworkTag)
+          : 'TUXcgkv3j4gSS67Wv5xHvFiBGyJzEtXrLp');
 
   const truncatedAddr =
     currentDepositAddress.length > 12
@@ -104,7 +104,7 @@ export const SendReceiveModal: React.FC = () => {
     }
   };
 
-  const handleSendSubmit = (e: React.FormEvent) => {
+  const handleSendSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (currentUser?.isFrozen) {
       setTxResult({
@@ -114,18 +114,28 @@ export const SendReceiveModal: React.FC = () => {
       return;
     }
     if (!toAddress || numAmount <= 0) return;
+    setIsSending(true);
 
-    const res = sendCrypto(activeAsset.symbol, numAmount, toAddress, currentNetworkTag);
-    setTxResult(res);
+    try {
+      const res = await sendCrypto(activeAsset.symbol, numAmount, toAddress.trim(), currentNetworkTag);
+      setTxResult(res);
 
-    if (res.success) {
-      setTimeout(() => {
-        setIsSendModalOpen(false);
-        setTxResult(null);
-        setAmount('');
-        setToAddress('');
-        setMemo('');
-      }, 2500);
+      if (res.success) {
+        setTimeout(() => {
+          setIsSendModalOpen(false);
+          setTxResult(null);
+          setAmount('');
+          setToAddress('');
+          setMemo('');
+        }, 2500);
+      }
+    } catch (err: any) {
+      setTxResult({
+        success: false,
+        message: err?.message || 'Transfer failed. Please check network connection.',
+      });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -345,11 +355,18 @@ export const SendReceiveModal: React.FC = () => {
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-[#0C0E14]/95 backdrop-blur-md border-t border-white/[0.04]">
               <button
                 onClick={handleSendSubmit}
-                disabled={!toAddress || numAmount <= 0}
-                className="w-full py-4 rounded-2xl bg-[#5B67F6] hover:bg-[#4E59E8] disabled:opacity-50 text-white font-semibold text-[16px] shadow-lg shadow-[#5B67F6]/25 transition-all active:scale-[0.98] cursor-pointer"
+                disabled={!toAddress || numAmount <= 0 || isSending}
+                className="w-full py-4 rounded-2xl bg-[#5B67F6] hover:bg-[#4E59E8] disabled:opacity-50 text-white font-semibold text-[16px] shadow-lg shadow-[#5B67F6]/25 transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
                 id="safepal-send-next-btn"
               >
-                Next
+                {isSending ? (
+                  <>
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  'Next'
+                )}
               </button>
             </div>
           </div>
