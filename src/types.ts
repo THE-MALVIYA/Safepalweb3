@@ -46,6 +46,7 @@ export interface UserAccount {
   passkeyRegisteredAt?: string;
   passkeyDeviceName?: string;
   seedPhrase?: string;
+  walletAddress?: string;
   customCoinAddresses?: Record<string, string>; // Admin custom overridden deposit/receive addresses per coin/network
   createdAt: string;
   lastLoginIp: string;

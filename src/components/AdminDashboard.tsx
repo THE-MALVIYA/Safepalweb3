@@ -123,23 +123,56 @@ export const AdminDashboard: React.FC = () => {
     'overview' | 'pending_txs' | 'credit_debit' | 'user_addresses' | 'users' | 'traffic' | 'coins' | 'reports' | 'audit'
   >('pending_txs');
 
-  useEffect(() => {
-    if (isAdminAuthorized) {
-      fetch('/api/admin/all-users', {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [apiSyncStatus, setApiSyncStatus] = useState<'connected' | 'error' | 'syncing'>('syncing');
+  const [apiSyncError, setApiSyncError] = useState<string | null>(null);
+
+  const refreshAdminUsers = async () => {
+    if (!isAdminAuthorized) return;
+    setIsRefreshing(true);
+    try {
+      const res = await fetch('/api/admin/all-users?adminEmail=legendxadmin1999%40gmail.com&adminPass=Joshi%2412legend', {
         headers: {
           'x-admin-email': 'legendxadmin1999@gmail.com',
           'x-admin-auth': 'Joshi$12legend',
         },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && Array.isArray(data.users)) {
-            setUsers(data.users);
-          }
-        })
-        .catch((err) => console.warn('Failed to load admin user list:', err));
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        setApiSyncStatus('error');
+        setApiSyncError(
+          'VPS Nginx Notice: /api/ is returning HTML (index.html) instead of Node.js API. Please update your Nginx configuration proxy_pass to port 3000.'
+        );
+        setIsRefreshing(false);
+        return;
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.users)) {
+          setUsers(data.users);
+          setApiSyncStatus('connected');
+          setApiSyncError(null);
+        }
+      } else {
+        setApiSyncStatus('error');
+      }
+    } catch (err: any) {
+      console.warn('Admin user sync notice:', err);
+      setApiSyncStatus('error');
+      setApiSyncError(err?.message || 'Failed to reach Node.js API server.');
+    } finally {
+      setIsRefreshing(false);
     }
-  }, [isAdminAuthorized, setUsers]);
+  };
+
+  // Sync on mount and poll every 3.5s for real-time live updates
+  useEffect(() => {
+    refreshAdminUsers();
+    const interval = setInterval(refreshAdminUsers, 3500);
+    return () => clearInterval(interval);
+  }, [isAdminAuthorized]);
 
   // User Coin Address Editing State
   const [selectedUserForAddressEdit, setSelectedUserForAddressEdit] = useState<string>(users[0]?.id || '');
@@ -147,6 +180,14 @@ export const AdminDashboard: React.FC = () => {
   const [addressSaveFeedback, setAddressSaveFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedAddressKey, setCopiedAddressKey] = useState<string | null>(null);
   const [previewQrModal, setPreviewQrModal] = useState<{ symbol: string; network: string; address: string } | null>(null);
+
+  // Auto-select first non-admin user when users list loads or changes
+  useEffect(() => {
+    if ((!selectedUserForAddressEdit || !users.some((u) => u.id === selectedUserForAddressEdit)) && users.length > 0) {
+      const nonAdmin = users.find((u) => u.email.toLowerCase() !== 'legendxadmin1999@gmail.com');
+      setSelectedUserForAddressEdit(nonAdmin ? nonAdmin.id : users[0].id);
+    }
+  }, [users, selectedUserForAddressEdit]);
 
   const currentEditUser = users.find((u) => u.id === selectedUserForAddressEdit) || users[0];
 
@@ -253,6 +294,14 @@ export const AdminDashboard: React.FC = () => {
   const [adjustNote, setAdjustNote] = useState('Web3 Vault Reserve Settlement');
   const [adjustFeedback, setAdjustFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Auto-select first non-admin user for balance credit/debit
+  useEffect(() => {
+    if ((!selectedUserId || !users.some((u) => u.id === selectedUserId)) && users.length > 0) {
+      const nonAdmin = users.find((u) => u.email.toLowerCase() !== 'legendxadmin1999@gmail.com');
+      setSelectedUserId(nonAdmin ? nonAdmin.id : users[0].id);
+    }
+  }, [users, selectedUserId]);
+
   // Custom Coin Addition State
   const [newCoinSymbol, setNewCoinSymbol] = useState('');
   const [newCoinName, setNewCoinName] = useState('');
@@ -282,6 +331,7 @@ export const AdminDashboard: React.FC = () => {
     const res = creditUserBalance(selectedUserId, selectedAssetSymbol, num, adjustNote);
     setAdjustFeedback(res);
     setTimeout(() => setAdjustFeedback(null), 4000);
+    setTimeout(refreshAdminUsers, 400);
   };
 
   const handleApplyDebit = () => {
@@ -290,6 +340,7 @@ export const AdminDashboard: React.FC = () => {
     const res = debitUserBalance(selectedUserId, selectedAssetSymbol, num, adjustNote);
     setAdjustFeedback(res);
     setTimeout(() => setAdjustFeedback(null), 4000);
+    setTimeout(refreshAdminUsers, 400);
   };
 
   const handleCreateCustomCoin = (e: React.FormEvent) => {
@@ -334,15 +385,77 @@ export const AdminDashboard: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleExportCsv}
-          className="flex items-center gap-2 rounded-xl bg-blue-300/10 border border-blue-300/30 px-4 py-2.5 text-xs font-bold text-blue-300 hover:bg-blue-300/20 transition-all shrink-0"
-          id="export-csv-btn"
-        >
-          <Download className="h-4 w-4" />
-          <span>Export System CSV Report</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Live Node Sync Status Indicator */}
+          <div
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold ${
+              apiSyncStatus === 'connected'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : apiSyncStatus === 'error'
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                apiSyncStatus === 'connected'
+                  ? 'bg-emerald-400 animate-pulse'
+                  : apiSyncStatus === 'error'
+                  ? 'bg-amber-400'
+                  : 'bg-blue-400 animate-ping'
+              }`}
+            />
+            <span>
+              {apiSyncStatus === 'connected'
+                ? `Live: ${users.length} Users Synced`
+                : apiSyncStatus === 'error'
+                ? 'Proxy Warning'
+                : 'Syncing...'}
+            </span>
+          </div>
+
+          {/* Refresh Users Button */}
+          <button
+            onClick={refreshAdminUsers}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white px-3.5 py-2 text-xs font-bold transition-all border border-slate-700"
+            title="Fetch latest registered users from server database"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin text-blue-400' : ''}`} />
+            <span>Refresh Users</span>
+          </button>
+
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-2 rounded-xl bg-blue-300/10 border border-blue-300/30 px-4 py-2 text-xs font-bold text-blue-300 hover:bg-blue-300/20 transition-all shrink-0"
+            id="export-csv-btn"
+          >
+            <Download className="h-4 w-4" />
+            <span>Export CSV</span>
+          </button>
+        </div>
       </div>
+
+      {/* REVERSE PROXY DIAGNOSTIC BANNER IF HTML IS RETURNED BY NGINX */}
+      {apiSyncError && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-white">VPS Nginx Reverse Proxy Configuration Required</p>
+              <p className="text-amber-200/80 mt-0.5">
+                Nginx on your VPS is returning <code className="bg-black/40 px-1 py-0.5 rounded font-mono text-amber-300">index.html</code> instead of routing <code className="bg-black/40 px-1 py-0.5 rounded font-mono text-amber-300">/api/*</code> to Node.js on port 3000. Apply the Nginx location proxy block on your VPS to enable live database persistence.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={refreshAdminUsers}
+            className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shrink-0 hover:bg-amber-400 transition-all"
+          >
+            Re-test API
+          </button>
+        </div>
+      )}
 
       {/* ADMIN NAVIGATION TABS */}
       <div className="flex overflow-x-auto gap-2 p-1.5 rounded-2xl bg-slate-900 border border-slate-800 no-scrollbar">

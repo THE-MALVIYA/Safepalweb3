@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useWallet, getUserReceiveAddress } from '../context/WalletContext';
+import { useWallet, getUserReceiveAddress, isAddressMatchingUser } from '../context/WalletContext';
 import { CryptoIcon } from './CryptoIcon';
 import {
   ChevronLeft,
@@ -16,6 +16,7 @@ import {
   Share2,
   X,
   Smartphone,
+  Zap,
 } from 'lucide-react';
 
 export const SendReceiveModal: React.FC = () => {
@@ -28,6 +29,7 @@ export const SendReceiveModal: React.FC = () => {
     setSelectedAssetForModal,
     assets,
     currentUser,
+    users,
     sendCrypto,
     depositCrypto,
     depositAddresses,
@@ -83,6 +85,23 @@ export const SendReceiveModal: React.FC = () => {
     currentDepositAddress.length > 12
       ? `${currentDepositAddress.slice(0, 4)}...${currentDepositAddress.slice(-4)}`
       : currentDepositAddress;
+
+  // Real-time SafePal internal peer detection (email, phone, User ID, custom address, or generated address)
+  const cleanToQuery = toAddress.trim().toLowerCase();
+  const cleanToDigits = cleanToQuery.replace(/\D/g, '');
+  const matchedInternalUser = cleanToQuery && currentUser ? users.find((u) => {
+    if (u.id === currentUser.id) return false;
+    if (u.email && u.email.toLowerCase() === cleanToQuery) return true;
+    if (u.id && u.id.toLowerCase() === cleanToQuery) return true;
+    if (u.name && u.name.toLowerCase() === cleanToQuery) return true;
+    if (u.phone) {
+      const uPhone = u.phone.toLowerCase().trim();
+      const uDigits = u.phone.replace(/\D/g, '');
+      if (uPhone === cleanToQuery) return true;
+      if (cleanToDigits.length >= 6 && uDigits && (uDigits === cleanToDigits || uDigits.endsWith(cleanToDigits))) return true;
+    }
+    return isAddressMatchingUser(u, cleanToQuery, activeAsset.symbol, currentNetworkTag);
+  }) : null;
 
   // SafePal address green coloring logic (first 6 and last 6 chars highlighted in green)
   const addrPrefix = currentDepositAddress.slice(0, 6);
@@ -250,7 +269,7 @@ export const SendReceiveModal: React.FC = () => {
                     type="text"
                     value={toAddress}
                     onChange={(e) => setToAddress(e.target.value)}
-                    placeholder="Enter the address"
+                    placeholder="Enter wallet address, user ID, or email"
                     className="w-full bg-[#161922] rounded-2xl px-4 py-3.5 pr-16 text-[14px] text-white placeholder-[#5A5D6B] font-mono focus:outline-none border border-transparent focus:border-[#5B67F6]/50 transition-colors"
                   />
                   <button
@@ -261,6 +280,15 @@ export const SendReceiveModal: React.FC = () => {
                     Paste
                   </button>
                 </div>
+
+                {matchedInternalUser && (
+                  <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[12px] animate-fadeIn">
+                    <Zap className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                    <span>
+                      Direct Peer Transfer: <strong className="text-white">{matchedInternalUser.name}</strong> • Instant Settlement (Zero Gas Fee)
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Warning Banner Card */}

