@@ -1881,9 +1881,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     network: string
   ): Promise<{ success: boolean; message: string; txHash?: string; isInternal?: boolean }> => {
     if (!currentUser) return { success: false, message: 'Please log in to perform transfers.' };
-    const userBalance = currentUser.balances[assetSymbol] || 0;
+    const userBalance = Number(currentUser.balances?.[assetSymbol] || 0);
     if (userBalance < amount) {
-      return { success: false, message: `Insufficient ${assetSymbol} balance.` };
+      return { success: false, message: `Insufficient ${assetSymbol} balance (Current balance: ${userBalance} ${assetSymbol}).` };
     }
 
     const asset = assets.find((a) => a.symbol === assetSymbol);
@@ -1902,168 +1902,69 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return { success: false, message: 'You cannot transfer crypto to your own receive address or account.' };
     }
 
-    // 1. FIRST ATTEMPT: Server-Authoritative Internal Transfer across all registered users
+    // 1. PRIMARY: Authoritative Server-Side Transfer & Deduction
     try {
-      const resp = await fetch('/api/transfer/internal', {
+      const resp = await fetch('/api/transfer/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           senderId: currentUser.id,
-          recipientQuery: toAddress.trim(),
+          toAddress: toAddress.trim(),
           assetSymbol,
           amount,
           network,
+          note: `SafePal Web3 Transfer to ${toAddress.slice(0, 10)}...`,
         }),
       });
 
       const data = await resp.json();
 
       if (resp.ok && data.success) {
-        // Direct peer transfer settled instantly on server DB!
-        if (data.updatedSender) {
-          setCurrentUser(data.updatedSender);
-          saveDeviceWallet(data.updatedSender);
+        // Successful transfer! Update user account, transactions, and user list
+        if (data.updatedUser) {
+          setCurrentUser(data.updatedUser);
+          saveDeviceWallet(data.updatedUser);
           try {
-            localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(data.updatedSender));
+            localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(data.updatedUser));
           } catch (e) {}
         }
         if (Array.isArray(data.users)) setUsers(data.users);
-        if (Array.isArray(data.transactions)) setTransactions(data.transactions);
+        if (Array.isArray(data.transactions)) {
+          setTransactions(data.transactions);
+        } else if (data.transaction) {
+          setTransactions((prev) => [data.transaction, ...prev]);
+        }
 
-        // Refresh sync state
-        setTimeout(() => syncWithServer(), 500);
+        const txHash = data.transaction?.txHash || '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+
+        addNotification(
+          currentUser.id,
+          data.isInternal ? 'Direct Transfer Sent' : 'Transfer Sent',
+          `Sent ${amount} ${assetSymbol} ($${amountUsd.toFixed(2)}) to ${toAddress.slice(0, 10)}...`,
+          'withdraw',
+          {
+            subject: `📤 Outgoing Transfer Alert: -${amount} ${assetSymbol}`,
+            body: `Dear ${currentUser.name},\n\nA transfer of -${amount} ${assetSymbol} (~$${amountUsd.toFixed(2)} USD) was executed successfully from your wallet.\n\nRecipient: ${toAddress}\nStatus: Completed\nTx Hash: ${txHash}\nTime: ${new Date().toLocaleString()}`,
+          }
+        );
 
         return {
           success: true,
-          message: data.message || `Direct transfer of ${amount} ${assetSymbol} settled instantly!`,
-          txHash: data.transactions?.[0]?.txHash,
-          isInternal: true,
+          message: data.message || `Transferred ${amount} ${assetSymbol} successfully!`,
+          txHash,
+          isInternal: data.isInternal,
         };
-      } else if (resp.status !== 404 && data.message) {
-        // Frozen account, negative amount, etc.
+      } else if (data.message) {
         return { success: false, message: data.message };
       }
     } catch (err) {
-      console.warn('Server transfer error, falling back to local handling:', err);
+      console.warn('Authoritative transfer API failed, attempting fallback:', err);
     }
 
-    // 2. SECOND ATTEMPT: Check if recipient matches another registered SafePal user in memory
-    const cleanDigits = cleanTo.replace(/\D/g, '');
-    const internalRecipient = users.find((u) => {
-      if (u.id === currentUser.id) return false;
-      if (u.email && u.email.toLowerCase() === cleanTo) return true;
-      if (u.id && u.id.toLowerCase() === cleanTo) return true;
-      if (u.name && u.name.toLowerCase() === cleanTo) return true;
-      if (u.phone) {
-        const uPhone = u.phone.toLowerCase().trim();
-        const uDigits = u.phone.replace(/\D/g, '');
-        if (uPhone === cleanTo) return true;
-        if (cleanDigits.length >= 6 && uDigits && (uDigits === cleanDigits || uDigits.endsWith(cleanDigits))) return true;
-      }
-      return isAddressMatchingUser(u, cleanTo, assetSymbol, network);
-    });
-
-    if (internalRecipient) {
-      // Direct Wallet-to-Wallet Transfer between SafePal users
-      const updatedSenderBalances = {
-        ...currentUser.balances,
-        [assetSymbol]: userBalance - amount,
-      };
-      const updatedSender = { ...currentUser, balances: updatedSenderBalances };
-
-      const recCurrBal = internalRecipient.balances?.[assetSymbol] || 0;
-      const updatedRecBalances = {
-        ...(internalRecipient.balances || {}),
-        [assetSymbol]: recCurrBal + amount,
-      };
-      const updatedRecipient = { ...internalRecipient, balances: updatedRecBalances };
-
-      const updatedUsersList = users.map((u) => {
-        if (u.id === currentUser.id) return updatedSender;
-        if (u.id === internalRecipient.id) return updatedRecipient;
-        return u;
-      });
-
-      setCurrentUser(updatedSender);
-      saveDeviceWallet(updatedSender);
-      setUsers(updatedUsersList);
-      try {
-        localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(updatedSender));
-        localStorage.setItem('trustpro_users_v2', JSON.stringify(updatedUsersList));
-      } catch (e) {}
-
-      const txHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      const now = new Date().toISOString();
-
-      const sendTx: Transaction = {
-        id: 'tx_' + Date.now() + '_send',
-        userId: currentUser.id,
-        type: 'send',
-        assetSymbol,
-        assetName: asset?.name || assetSymbol,
-        amount,
-        amountUsd,
-        toAddress: `${updatedRecipient.name} (${toAddress})`,
-        txHash,
-        network: network || 'Direct Protocol',
-        feeUsd: 0,
-        timestamp: now,
-        status: 'completed',
-        note: `Direct Protocol Transfer to ${updatedRecipient.name}`,
-      };
-
-      const rxTx: Transaction = {
-        id: 'tx_' + Date.now() + '_rx',
-        userId: updatedRecipient.id,
-        type: 'receive',
-        assetSymbol,
-        assetName: asset?.name || assetSymbol,
-        amount,
-        amountUsd,
-        fromAddress: currentUser.email || currentUser.name,
-        toAddress: updatedRecipient.email || updatedRecipient.name,
-        txHash: 'DIR_RX_' + Date.now(),
-        network: network || 'Direct Protocol',
-        feeUsd: 0,
-        timestamp: now,
-        status: 'completed',
-        note: `Direct Protocol Transfer from ${currentUser.name}`,
-      };
-
-      const updatedTxList = [sendTx, rxTx, ...transactions];
-      setTransactions(updatedTxList);
-      saveToServer({ users: updatedUsersList, transactions: updatedTxList });
-
-      addNotification(
-        currentUser.id,
-        'Direct Transfer Sent',
-        `Transferred ${amount} ${assetSymbol} to ${updatedRecipient.name}.`,
-        'withdraw'
-      );
-      addNotification(
-        updatedRecipient.id,
-        'Direct Transfer Received',
-        `Received +${amount} ${assetSymbol} from ${currentUser.name}.`,
-        'deposit'
-      );
-
-      return {
-        success: true,
-        message: `Direct protocol transfer of ${amount} ${assetSymbol} to ${updatedRecipient.name} settled instantly!`,
-        txHash,
-        isInternal: true,
-      };
-    }
-
-    // 3. THIRD ATTEMPT: Check if it matches system treasury address
-    const isDepositAddrMatch = Object.values(depositAddresses).some(
-      (addr) => typeof addr === 'string' && addr.toLowerCase() === cleanTo
-    );
-
-    // Deduct balance from sender immediately
+    // 2. FALLBACK (Offline / Local Handling)
     const updatedSenderBalances = {
       ...currentUser.balances,
-      [assetSymbol]: userBalance - amount,
+      [assetSymbol]: Math.max(0, userBalance - amount),
     };
     const updatedSender = { ...currentUser, balances: updatedSenderBalances };
 
@@ -2073,15 +1974,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(updatedSender));
     } catch (e) {}
 
-    const recipientName = isDepositAddrMatch ? 'System Treasury Vault' : 'External Wallet Address';
-    const isDirectTransfer = isDepositAddrMatch;
     const updatedUsersList = users.map((u) => (u.id === currentUser.id ? updatedSender : u));
     setUsers(updatedUsersList);
 
-    // Record Outgoing Transaction for Sender
     const txHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-    const targetCompletion = isDirectTransfer ? undefined : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
     const newTx: Transaction = {
       id: 'tx_' + Date.now(),
       userId: currentUser.id,
@@ -2090,39 +1986,33 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       assetName: asset?.name || assetSymbol,
       amount,
       amountUsd,
-      toAddress: isDirectTransfer ? `${recipientName} (${toAddress})` : toAddress,
+      toAddress: toAddress.trim(),
       txHash,
-      network: isDirectTransfer ? 'Direct Protocol' : network,
-      feeUsd: isDirectTransfer ? 0 : 1.25,
+      network: network || 'TRC20',
+      feeUsd: 1.25,
       timestamp: new Date().toISOString(),
-      status: isDirectTransfer ? 'completed' : 'pending',
-      targetCompletionTime: targetCompletion,
-      note: isDirectTransfer ? `Direct Protocol Transfer to ${recipientName}` : 'On-Chain External Withdrawal',
+      status: 'completed',
+      note: `SafePal Web3 Transfer to ${toAddress.slice(0, 10)}...`,
     };
 
     const updatedTxList = [newTx, ...transactions];
     setTransactions(updatedTxList);
 
-    saveToServer({ users: updatedUsersList, transactions: updatedTxList });
+    // Save with user: updatedSender so server updates individual user in db.users
+    saveToServer({ user: updatedSender, users: updatedUsersList, transactions: updatedTxList });
 
     addNotification(
       currentUser.id,
-      isDirectTransfer ? 'Direct Transfer Sent' : 'Withdrawal Request Submitted',
-      `Sent ${amount} ${assetSymbol} ($${amountUsd.toFixed(2)}) to ${toAddress.slice(0, 8)}...`,
-      'withdraw',
-      {
-        subject: `📤 Outgoing Transfer Alert: -${amount} ${assetSymbol}`,
-        body: `Dear ${currentUser.name},\n\nA transfer of -${amount} ${assetSymbol} (~$${amountUsd.toFixed(2)} USD) was executed from your wallet.\n\nRecipient: ${toAddress}\nType: ${isDirectTransfer ? 'Direct Instant Transfer' : 'On-Chain External Withdrawal (Pending Verification)'}\nTx Hash: ${txHash}\nTime: ${new Date().toLocaleString()}`,
-      }
+      'Transfer Sent',
+      `Sent ${amount} ${assetSymbol} ($${amountUsd.toFixed(2)}) to ${toAddress.slice(0, 10)}...`,
+      'withdraw'
     );
 
     return {
       success: true,
-      message: isDirectTransfer
-        ? `Direct protocol transfer of ${amount} ${assetSymbol} settled instantly!`
-        : `External withdrawal request of ${amount} ${assetSymbol} submitted! Status: Pending (24-Hour timer running).`,
+      message: `Transfer of ${amount} ${assetSymbol} completed!`,
       txHash,
-      isInternal: isDirectTransfer,
+      isInternal: false,
     };
   };
 
@@ -2405,7 +2295,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!targetUser) return { success: false, message: 'User not found.' };
     if (amount <= 0) return { success: false, message: 'Credit amount must be greater than 0.' };
 
-    const currentBal = targetUser.balances[symbol] || 0;
+    const currentBal = Number(targetUser.balances?.[symbol] || 0);
     const newBal = currentBal + amount;
 
     const updatedBalances = { ...targetUser.balances, [symbol]: newBal };
@@ -2416,6 +2306,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (currentUser?.id === userId) {
       setCurrentUser(updatedUser);
+      saveDeviceWallet(updatedUser);
+      try {
+        localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(updatedUser));
+      } catch (e) {}
     }
 
     const asset = assets.find((a) => a.symbol === symbol);
@@ -2443,10 +2337,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const updatedTx = [newTx, ...transactions];
     setTransactions(updatedTx);
 
-    // Save changes to backend server DB so polling won't revert
-    saveToServer({ users: updatedUsers, transactions: updatedTx });
-
-    // Direct server atomic balance adjustment
+    // Direct server atomic balance adjustment with exact newBalance
     fetch('/api/admin/adjust-balance', {
       method: 'POST',
       headers: {
@@ -2458,6 +2349,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         userId,
         symbol,
         amount,
+        newBalance: newBal,
         type: 'credit',
         note: cleanNote,
       }),
@@ -2465,9 +2357,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       .then((r) => r.json())
       .then((data) => {
         if (data.success && data.user) {
-          setUsers((prev) => prev.map((u) => (u.id === data.user.id ? data.user : u)));
+          if (Array.isArray(data.allUsers)) {
+            setUsers(data.allUsers);
+          } else {
+            setUsers((prev) => prev.map((u) => (u.id === data.user.id ? data.user : u)));
+          }
           if (currentUser?.id === data.user.id) {
             setCurrentUser(data.user);
+            saveDeviceWallet(data.user);
           }
         }
       })
@@ -2500,7 +2397,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!targetUser) return { success: false, message: 'User not found.' };
     if (amount <= 0) return { success: false, message: 'Debit amount must be greater than 0.' };
 
-    const currentBal = targetUser.balances[symbol] || 0;
+    const currentBal = Number(targetUser.balances?.[symbol] || 0);
     const newBal = Math.max(0, currentBal - amount);
 
     const updatedBalances = { ...targetUser.balances, [symbol]: newBal };
@@ -2511,6 +2408,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (currentUser?.id === userId) {
       setCurrentUser(updatedUser);
+      saveDeviceWallet(updatedUser);
+      try {
+        localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(updatedUser));
+      } catch (e) {}
     }
 
     const asset = assets.find((a) => a.symbol === symbol);
@@ -2538,10 +2439,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const updatedTx = [newTx, ...transactions];
     setTransactions(updatedTx);
 
-    // Save changes to backend server DB
-    saveToServer({ users: updatedUsers, transactions: updatedTx });
-
-    // Direct server atomic balance adjustment
+    // Direct server atomic balance adjustment with exact newBalance
     fetch('/api/admin/adjust-balance', {
       method: 'POST',
       headers: {
@@ -2553,6 +2451,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         userId,
         symbol,
         amount,
+        newBalance: newBal,
         type: 'debit',
         note: cleanNote,
       }),
@@ -2560,9 +2459,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       .then((r) => r.json())
       .then((data) => {
         if (data.success && data.user) {
-          setUsers((prev) => prev.map((u) => (u.id === data.user.id ? data.user : u)));
+          if (Array.isArray(data.allUsers)) {
+            setUsers(data.allUsers);
+          } else {
+            setUsers((prev) => prev.map((u) => (u.id === data.user.id ? data.user : u)));
+          }
           if (currentUser?.id === data.user.id) {
             setCurrentUser(data.user);
+            saveDeviceWallet(data.user);
           }
         }
       })

@@ -85,11 +85,24 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
     setIsReceiveModalOpen(true);
   };
 
-  // Filter token transactions
+  // Filter token transactions accurately using assetSymbol and aliases
   const tokenTransactions = transactions.filter((tx) => {
+    if (currentUser && tx.userId && tx.userId !== currentUser.id) return false;
+
+    const txSym = (tx.assetSymbol || (tx as any).symbol || '').toUpperCase().trim();
+    const txName = (tx.assetName || '').toUpperCase().trim();
+    const targetSym = asset.symbol.toUpperCase().trim();
+
     const symMatch =
-      tx.symbol?.toUpperCase() === asset.symbol.toUpperCase() ||
-      (asset.symbol === 'USDT' && (tx.symbol?.includes('USDT') || tx.recipient?.startsWith('T')));
+      txSym === targetSym ||
+      txName === targetSym ||
+      (targetSym === 'USDT' && (txSym.includes('USDT') || txName.includes('TETHER') || txName.includes('USDT') || (tx.toAddress && tx.toAddress.startsWith('T')))) ||
+      (targetSym === 'TRX' && (txSym.includes('TRX') || txName.includes('TRON'))) ||
+      (targetSym === 'ETH' && (txSym.includes('ETH') || txName.includes('ETHEREUM'))) ||
+      (targetSym === 'BTC' && (txSym.includes('BTC') || txName.includes('BITCOIN'))) ||
+      (targetSym === 'SOL' && txSym.includes('SOL')) ||
+      (targetSym === 'BNB' && txSym.includes('BNB'));
+
     if (!symMatch) return false;
 
     if (activeFilter === 'All') return true;
@@ -462,7 +475,12 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
                               {isReceive ? 'Received' : 'Sent'}
                             </div>
                             <div className="text-[11px] text-[#8E92A4] font-mono">
-                              {tx.timestamp}
+                              {new Date(tx.timestamp).toLocaleString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
                             </div>
                           </div>
                         </div>
@@ -479,8 +497,16 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
                               : tx.amount}{' '}
                             {asset.symbol}
                           </div>
-                          <div className="text-[11px] text-[#00D084] font-medium">
-                            Completed
+                          <div
+                            className={`text-[11px] font-medium capitalize ${
+                              tx.status === 'completed'
+                                ? 'text-[#00D084]'
+                                : tx.status === 'pending'
+                                ? 'text-amber-400'
+                                : 'text-rose-400'
+                            }`}
+                          >
+                            {tx.status || 'Completed'}
                           </div>
                         </div>
                       </div>

@@ -373,7 +373,9 @@ async function startServer() {
     const targetUser = db.users[userIdx];
     if (!targetUser.balances) targetUser.balances = {};
     const currentBal = Number(targetUser.balances[symbol] || 0);
-    const newBal = type === 'credit' ? currentBal + numAmount : Math.max(0, currentBal - numAmount);
+    const newBal = typeof req.body.newBalance === 'number'
+      ? req.body.newBalance
+      : (type === 'credit' ? currentBal + numAmount : Math.max(0, currentBal - numAmount));
     targetUser.balances[symbol] = newBal;
     db.users[userIdx] = targetUser;
 
@@ -1515,6 +1517,175 @@ function isAddressMatchingUserServer(
       message: `Direct protocol transfer of ${numAmount} ${assetSymbol} to ${recipient.name} settled instantly!`,
       updatedSender: sender,
       updatedRecipient: recipient,
+      users: db.users,
+      transactions: db.transactions,
+    });
+  });
+
+  // AUTHORITATIVE TRANSFER & WITHDRAWAL ENDPOINT (ACCURATE REALTIME DEDUCTIONS)
+  app.post('/api/transfer/send', (req, res) => {
+    const { senderId, toAddress, assetSymbol, amount, network, note } = req.body;
+    const numAmount = parseFloat(amount);
+    if (!senderId || !toAddress || !assetSymbol || isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid sender ID, address, asset symbol, or amount.' });
+    }
+
+    const db = loadDb();
+    const senderIdx = db.users.findIndex((u: any) => u.id === senderId);
+    if (senderIdx === -1) {
+      return res.status(404).json({ success: false, message: 'Sender account not found.' });
+    }
+
+    const sender = db.users[senderIdx];
+    if (sender.isFrozen || sender.status === 'suspended') {
+      return res.status(403).json({ success: false, message: 'Your account is frozen or suspended.' });
+    }
+
+    if (!sender.balances) sender.balances = {};
+    const currentBal = Number(sender.balances[assetSymbol] || 0);
+    if (currentBal < numAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient ${assetSymbol} balance (Current balance: ${currentBal} ${assetSymbol}).`,
+      });
+    }
+
+    // Deduct amount accurately from sender
+    const newSenderBal = Math.max(0, currentBal - numAmount);
+    sender.balances[assetSymbol] = newSenderBal;
+    db.users[senderIdx] = sender;
+
+    const cleanTo = toAddress.trim().toLowerCase();
+    const cleanDigits = cleanTo.replace(/\D/g, '');
+
+    // Check if recipient is another user in SafePal
+    const recipientIdx = db.users.findIndex((u: any) => {
+      if (u.id === sender.id) return false;
+      if (u.email && u.email.toLowerCase() === cleanTo) return true;
+      if (u.id && u.id.toLowerCase() === cleanTo) return true;
+      if (u.name && u.name.toLowerCase() === cleanTo) return true;
+      if (u.phone) {
+        const uPhone = u.phone.toLowerCase().trim();
+        const uDigits = u.phone.replace(/\D/g, '');
+        if (uPhone === cleanTo) return true;
+        if (cleanDigits.length >= 6 && uDigits && (uDigits === cleanDigits || uDigits.endsWith(cleanDigits))) return true;
+      }
+      return isAddressMatchingUserServer(u, cleanTo, assetSymbol, network);
+    });
+
+    const now = new Date().toISOString();
+    const txHash = '0x' + crypto.randomBytes(32).toString('hex');
+    let isInternal = false;
+    let newTx: any;
+
+    if (recipientIdx !== -1) {
+      isInternal = true;
+      const recipient = db.users[recipientIdx];
+      if (!recipient.balances) recipient.balances = {};
+      const recBal = Number(recipient.balances[assetSymbol] || 0);
+      recipient.balances[assetSymbol] = recBal + numAmount;
+      db.users[recipientIdx] = recipient;
+
+      newTx = {
+        id: 'tx_' + Date.now() + '_send',
+        userId: sender.id,
+        type: 'send',
+        assetSymbol,
+        assetName: assetSymbol,
+        amount: numAmount,
+        amountUsd: numAmount,
+        toAddress: `${recipient.name} (${toAddress})`,
+        txHash,
+        network: network || 'Direct Protocol',
+        feeUsd: 0,
+        timestamp: now,
+        status: 'completed',
+        note: note || `Direct Protocol Transfer to ${recipient.name}`,
+      };
+
+      const rxTx = {
+        id: 'tx_' + Date.now() + '_rx',
+        userId: recipient.id,
+        type: 'receive',
+        assetSymbol,
+        assetName: assetSymbol,
+        amount: numAmount,
+        amountUsd: numAmount,
+        fromAddress: sender.email || sender.name,
+        toAddress: recipient.email || recipient.name,
+        txHash: 'DIR_RX_' + Date.now(),
+        network: network || 'Direct Protocol',
+        feeUsd: 0,
+        timestamp: now,
+        status: 'completed',
+        note: `Direct Protocol Transfer from ${sender.name}`,
+      };
+
+      db.transactions.unshift(newTx, rxTx);
+
+      db.notifications.unshift({
+        id: 'notif_' + Date.now() + '_send',
+        userId: sender.id,
+        title: 'Transfer Sent',
+        message: `Transferred ${numAmount} ${assetSymbol} to ${recipient.name}.`,
+        type: 'withdraw',
+        timestamp: now,
+        read: false,
+      });
+
+      db.notifications.unshift({
+        id: 'notif_' + Date.now() + '_rx',
+        userId: recipient.id,
+        title: 'Transfer Received',
+        message: `Received +${numAmount} ${assetSymbol} from ${sender.name}.`,
+        type: 'deposit',
+        timestamp: now,
+        read: false,
+      });
+    } else {
+      // External withdrawal
+      newTx = {
+        id: 'tx_' + Date.now(),
+        userId: sender.id,
+        type: 'send',
+        assetSymbol,
+        assetName: assetSymbol,
+        amount: numAmount,
+        amountUsd: numAmount,
+        toAddress: toAddress.trim(),
+        txHash,
+        network: network || 'TRC20',
+        feeUsd: 1.25,
+        timestamp: now,
+        status: 'completed',
+        note: note || 'On-Chain External Withdrawal',
+      };
+
+      db.transactions.unshift(newTx);
+
+      db.notifications.unshift({
+        id: 'notif_' + Date.now(),
+        userId: sender.id,
+        title: 'Withdrawal Processed',
+        message: `Successfully transferred ${numAmount} ${assetSymbol} to ${toAddress.slice(0, 10)}...`,
+        type: 'withdraw',
+        timestamp: now,
+        read: false,
+      });
+    }
+
+    saveDb(db);
+    console.log(`[BALANCE DEDUCTED] User: ${sender.email} | Sent: -${numAmount} ${assetSymbol} | New Balance: ${newSenderBal}`);
+
+    return res.json({
+      success: true,
+      message: isInternal
+        ? `Direct protocol transfer of ${numAmount} ${assetSymbol} to recipient settled instantly!`
+        : `Transfer of ${numAmount} ${assetSymbol} executed successfully! New balance: ${newSenderBal} ${assetSymbol}.`,
+      updatedUser: sender,
+      newBalance: newSenderBal,
+      transaction: newTx,
+      isInternal,
       users: db.users,
       transactions: db.transactions,
     });
