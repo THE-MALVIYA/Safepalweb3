@@ -1,13 +1,13 @@
-# 🚀 SafePal Web3: VPS Nginx Fix & Complete Admin Panel Setup
+# 🚀 SafePal Web3: VPS Nginx & Allowed Hosts Deployment Guide
 
-## 📌 Root Cause: Why Users & Balances Weren't Showing in Admin Panel
-Aapka Node.js backend server (`dist/server.cjs`) VPS me port 3000 par PM2 ke zariye bilkul sahi chal raha hai.
-Lekin aapke **Nginx configuration** me `safepalweb3.sbs` ke andar `/api/` ka proxy missing tha.
-Is wajah se jab Admin Dashboard `/api/admin/all-users` ya `/api/users/register` call karta tha, toh Nginx backend ko forward karne ke bajaye seedha `index.html` file bhej deta tha (HTML response). 
-Isliye:
-1. Naye registered users database me save nahi ho rahe the.
-2. Admin panel me users list empty dikh rahi thi.
-3. Credit/Debit balances server par persist nahi ho pa rahe the.
+## 📌 Status Update (Good News!)
+Aapka Nginx ab **100% sahi tarah se port 3000 par proxy kar raha hai**!
+Screen par jo message aaya:
+`Blocked request. This host ("safepalweb3.sbs") is not allowed. To allow this host, add "safepalweb3.sbs" to server.allowedHosts in vite.config.js.`
+Ye tab aata hai jab Nginx port 3000 tak pahunch jata hai aur Vite 6 ka host check use allow karne ko kehta hai.
+
+Humne `vite.config.ts` aur `server.ts` me `allowedHosts: true` add kar diya hai!
+Ab aapko bas code pull karke build karna hai.
 
 ---
 
