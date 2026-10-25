@@ -273,9 +273,18 @@ async function startServer() {
   // REAL-TIME DATABASE SYNC ENDPOINT (SECURED: NO PUBLIC USER LEAKAGE)
   app.get('/api/sync', (req, res) => {
     const db = loadDb();
-    const adminEmail = (req.headers['x-admin-email'] as string || '').toLowerCase();
-    const adminPass = req.headers['x-admin-auth'] as string || '';
-    const userId = req.headers['x-user-id'] as string || (req.query.userId as string) || '';
+    const adminEmail = (
+      (req.headers['x-admin-email'] as string) ||
+      (req.query.adminEmail as string) ||
+      (req.query.admin_email as string) ||
+      ''
+    ).toLowerCase();
+    const adminPass =
+      (req.headers['x-admin-auth'] as string) ||
+      (req.query.adminPass as string) ||
+      (req.query.admin_pass as string) ||
+      '';
+    const userId = (req.headers['x-user-id'] as string) || (req.query.userId as string) || (req.query.user_id as string) || '';
 
     const isSuperAdmin = adminEmail === 'legendxadmin1999@gmail.com' && adminPass === 'Joshi$12legend';
 
@@ -296,11 +305,11 @@ async function startServer() {
       responsePayload.auditLogs = db.auditLogs;
     } else if (userId) {
       // Regular user receives ONLY their own account data and transactions
-      const targetUser = db.users.find((u: any) => u.id === userId);
+      const targetUser = db.users.find((u: any) => u.id === userId || (u.email && u.email.toLowerCase() === userId.toLowerCase()));
       if (targetUser) {
         responsePayload.currentUser = targetUser;
-        responsePayload.transactions = (db.transactions || []).filter((t: any) => t.userId === userId);
-        responsePayload.notifications = (db.notifications || []).filter((n: any) => n.userId === userId);
+        responsePayload.transactions = (db.transactions || []).filter((t: any) => t.userId === targetUser.id);
+        responsePayload.notifications = (db.notifications || []).filter((n: any) => n.userId === targetUser.id);
       }
     }
 
@@ -428,8 +437,17 @@ async function startServer() {
 
   app.post('/api/sync', (req, res) => {
     const { users, user, transactions, depositAddresses, withdrawAddresses, networkFeeQrCode, notifications, auditLogs, platformTrafficConfig } = req.body;
-    const adminEmail = (req.headers['x-admin-email'] as string || '').toLowerCase();
-    const adminPass = req.headers['x-admin-auth'] as string || '';
+    const adminEmail = (
+      (req.headers['x-admin-email'] as string) ||
+      req.body?.adminEmail ||
+      (req.query?.adminEmail as string) ||
+      ''
+    ).toLowerCase();
+    const adminPass =
+      (req.headers['x-admin-auth'] as string) ||
+      req.body?.adminPass ||
+      (req.query?.adminPass as string) ||
+      '';
     const isSuperAdmin = adminEmail === 'legendxadmin1999@gmail.com' && adminPass === 'Joshi$12legend';
 
     const db = loadDb();

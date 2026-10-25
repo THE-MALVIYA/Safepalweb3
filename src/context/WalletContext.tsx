@@ -718,12 +718,17 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const headers: Record<string, string> = {
         'x-user-id': currentUser?.id || '',
       };
+      const queryParams = new URLSearchParams();
+      if (currentUser?.id) queryParams.set('userId', currentUser.id);
       if (isAdmin) {
         headers['x-admin-email'] = 'legendxadmin1999@gmail.com';
         headers['x-admin-auth'] = 'Joshi$12legend';
+        queryParams.set('adminEmail', 'legendxadmin1999@gmail.com');
+        queryParams.set('adminPass', 'Joshi$12legend');
       }
 
-      const res = await fetch('/api/sync', { headers });
+      const syncUrl = `/api/sync${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const res = await fetch(syncUrl, { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -788,7 +793,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     fetch('/api/sync', {
       method: 'POST',
       headers,
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        ...(isAdmin
+          ? {
+              adminEmail: 'legendxadmin1999@gmail.com',
+              adminPass: 'Joshi$12legend',
+            }
+          : {}),
+      }),
     }).catch((err) => console.warn('Sync to server warn:', err));
   };
 
