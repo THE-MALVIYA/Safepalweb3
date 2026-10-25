@@ -182,12 +182,24 @@ async function startServer() {
   const app = express();
   const portArgIdx = process.argv.indexOf('--port');
   const portFromArg = portArgIdx !== -1 && process.argv[portArgIdx + 1] ? parseInt(process.argv[portArgIdx + 1], 10) : null;
-  const PORT = portFromArg || 3000;
+  // Port 3000 & iFrame: Dev server must run on port 3000
+  const PORT = portFromArg || (process.env.NODE_ENV === 'production' && process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
 
   const hostArgIdx = process.argv.indexOf('--host');
   const HOST = hostArgIdx !== -1 && process.argv[hostArgIdx + 1] ? process.argv[hostArgIdx + 1] : '0.0.0.0';
 
   app.use(express.json());
+
+  // Universal CORS & Preflight handler for VPS / Reverse Proxy hosting
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-admin-email, x-admin-auth, x-user-id');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
 
   // API Endpoints
   app.get('/api/health', (_req, res) => {
@@ -1924,18 +1936,37 @@ function isAddressMatchingUserServer(
     });
   });
 
-  // Vite Middleware for development mode
-  if (process.env.NODE_ENV !== 'production') {
+  // Mode detection: Vite middleware for development, static dist for production bundle
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    (Boolean(process.argv[1]) && (process.argv[1].endsWith('.cjs') || process.argv[1].includes('dist')));
+
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    // Resilient dist directory lookup (works from root, dist/, or arbitrary VPS working directories)
+    const candidatePaths = [
+      path.join(process.cwd(), 'dist'),
+      process.cwd(),
+      path.join(process.cwd(), '..', 'dist'),
+    ];
+    const distPath = candidatePaths.find((dir) =>
+      fs.existsSync(path.join(dir, 'index.html'))
+    ) || path.join(process.cwd(), 'dist');
+
+    console.log(`[PRODUCTION MODE] Serving static web files from: ${distPath}`);
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexFile = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexFile)) {
+        res.sendFile(indexFile);
+      } else {
+        res.status(404).send('Build files not found. Please run "npm run build" first.');
+      }
     });
   }
 
