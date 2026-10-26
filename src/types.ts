@@ -1,6 +1,8 @@
 export type Role = 'user' | 'admin';
 export type UserStatus = 'active' | 'suspended';
 export type KycStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+export type FiatCurrency = 'USD' | 'INR' | 'EUR' | 'GBP' | 'JPY' | 'AED' | 'CNY' | 'CAD' | 'AUD';
+export type ThemeMode = 'dark' | 'oled' | 'navy' | 'light';
 
 export interface CryptoAsset {
   id: string;
@@ -184,3 +186,26 @@ export interface AuditLog {
   timestamp: string;
   ipAddress: string;
 }
+
+export type LiveTxType = 'deposit' | 'withdraw' | 'send' | 'swap';
+export type LiveTxStage = 'pending' | 'processing' | 'success' | 'failed';
+
+export interface LiveTransactionToastData {
+  id: string;
+  type: LiveTxType;
+  stage: LiveTxStage;
+  amount: number;
+  symbol: string;
+  amountUsd?: number;
+  network?: string;
+  txHash?: string;
+  fromAddress?: string;
+  toAddress?: string;
+  confirmations: number;
+  maxConfirmations: number;
+  title: string;
+  subtitle: string;
+  startedAt: number;
+  durationMs: number; // 30000 ms (30 seconds)
+}
+

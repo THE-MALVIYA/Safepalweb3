@@ -89,66 +89,6 @@ const defaultUsers = [
     lastLoginIp: '192.168.1.101',
     lastLoginTime: new Date().toISOString(),
   },
-  {
-    id: 'usr_alex_01',
-    name: 'Alex Turner',
-    email: 'alex.turner@safepal.io',
-    password: 'UserPass2026!',
-    phone: '+1 202 555 0192',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
-    role: 'user',
-    status: 'active',
-    kycStatus: 'verified',
-    balances: {
-      BTC: 0.25,
-      ETH: 2.5,
-      BNB: 5.0,
-      SOL: 18.0,
-      USDT: 2450.0,
-      USDC: 1200.0,
-      POL: 350.0,
-      XRP: 800.0,
-      DOGE: 1500.0,
-      LTC: 4.2,
-      TRX: 2500.0,
-      GAS_TRX: 150.0,
-    },
-    twoFactorEnabled: false,
-    passkeyEnabled: false,
-    createdAt: '2025-02-14T08:30:00Z',
-    lastLoginIp: '104.28.19.45',
-    lastLoginTime: new Date().toISOString(),
-  },
-  {
-    id: 'usr_rohit_02',
-    name: 'Rohit Sharma',
-    email: 'rohit.web3@gmail.com',
-    password: 'CryptoTrader#88',
-    phone: '+91 9820012345',
-    avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=200',
-    role: 'user',
-    status: 'active',
-    kycStatus: 'verified',
-    balances: {
-      BTC: 0.08,
-      ETH: 1.15,
-      BNB: 2.2,
-      SOL: 8.5,
-      USDT: 1800.0,
-      USDC: 950.0,
-      POL: 200.0,
-      XRP: 500.0,
-      DOGE: 3000.0,
-      LTC: 1.8,
-      TRX: 1200.0,
-      GAS_TRX: 80.0,
-    },
-    twoFactorEnabled: false,
-    passkeyEnabled: false,
-    createdAt: '2025-03-01T12:00:00Z',
-    lastLoginIp: '103.45.22.11',
-    lastLoginTime: new Date().toISOString(),
-  },
 ];
 
 const defaultDepositAddresses = {
@@ -195,6 +135,10 @@ function loadDb() {
     if (fs.existsSync(DB_FILE)) {
       const content = fs.readFileSync(DB_FILE, 'utf-8');
       const data = JSON.parse(content);
+
+      if (!Array.isArray(data.deletedUserIds)) data.deletedUserIds = [];
+      if (!Array.isArray(data.deletedEmails)) data.deletedEmails = [];
+
       if (!Array.isArray(data.users) || data.users.length === 0) {
         data.users = defaultUsers;
       } else {
@@ -204,10 +148,18 @@ function loadDb() {
         if (!hasAdmin) {
           data.users.unshift(defaultUsers[0]);
         }
-        if (data.users.length === 1) {
-          data.users.push(defaultUsers[1], defaultUsers[2]);
-        }
       }
+
+      // Purge any deleted users permanently
+      data.users = data.users.filter(
+        (u: any) =>
+          u &&
+          u.id &&
+          !['usr_001', 'usr_002', 'usr_003', 'usr_alex_01', 'usr_rohit_02'].includes(u.id) &&
+          !data.deletedUserIds.includes(u.id) &&
+          (!u.email || !data.deletedEmails.includes(u.email.toLowerCase()))
+      );
+
       if (!Array.isArray(data.transactions)) data.transactions = [];
       if (!data.depositAddresses) data.depositAddresses = defaultDepositAddresses;
       if (!data.withdrawAddresses) data.withdrawAddresses = defaultWithdrawAddresses;
@@ -222,6 +174,8 @@ function loadDb() {
   }
   const initDb = {
     users: defaultUsers,
+    deletedUserIds: [],
+    deletedEmails: [],
     transactions: [],
     depositAddresses: defaultDepositAddresses,
     withdrawAddresses: defaultWithdrawAddresses,
@@ -1256,27 +1210,78 @@ async function startServer() {
     return res.json({ success: true, user: db.users[idx], users: db.users });
   });
 
-  // DELETE USER ACCOUNT ENDPOINT
-  app.post('/api/users/delete', (req, res) => {
+  // DELETE USER ACCOUNT ENDPOINT (PERMANENT PURGE FROM DATABASE)
+  app.post(['/api/users/delete', '/api/admin/delete-user'], (req, res) => {
     const { userId } = req.body;
-    const adminEmail = (req.headers['x-admin-email'] as string || '').toLowerCase();
-    const adminPass = req.headers['x-admin-auth'] as string || '';
+    const adminEmail = (
+      (req.headers['x-admin-email'] as string) ||
+      req.body.adminEmail ||
+      (req.query.adminEmail as string) ||
+      ''
+    ).toLowerCase();
+    const adminPass =
+      (req.headers['x-admin-auth'] as string) ||
+      req.body.adminPass ||
+      (req.query.adminPass as string) ||
+      '';
     const isSuperAdmin = adminEmail === 'legendxadmin1999@gmail.com' && adminPass === 'Joshi$12legend';
 
-    const db = loadDb();
-    if (userId) {
-      const targetUser = db.users.find((u: any) => u.id === userId);
-      if (targetUser && targetUser.email.toLowerCase() === 'legendxadmin1999@gmail.com') {
-        return res.status(400).json({ success: false, message: 'Cannot delete Super Admin account.' });
-      }
-
-      db.users = db.users.filter((u: any) => u.id !== userId);
-      db.transactions = (db.transactions || []).filter((tx: any) => tx.userId !== userId);
-      db.notifications = (db.notifications || []).filter((n: any) => n.userId !== userId);
-      saveDb(db);
-      console.log(`[USER DELETED FROM SERVER DB] User ID: ${userId}`);
+    if (!isSuperAdmin) {
+      return res.status(403).json({ success: false, message: 'Unauthorized: Super Admin credentials required to delete accounts.' });
     }
-    res.json({ success: true, users: db.users });
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'userId is required for deletion.' });
+    }
+
+    const db = loadDb();
+    if (!Array.isArray(db.deletedUserIds)) db.deletedUserIds = [];
+    if (!Array.isArray(db.deletedEmails)) db.deletedEmails = [];
+
+    const targetUser = db.users.find((u: any) => u.id === userId);
+    if (targetUser && targetUser.email && targetUser.email.toLowerCase() === 'legendxadmin1999@gmail.com') {
+      return res.status(400).json({ success: false, message: 'Primary Platform Administrator account cannot be deleted.' });
+    }
+
+    // Register into permanent deleted registry so it can NEVER be restored
+    if (!db.deletedUserIds.includes(userId)) {
+      db.deletedUserIds.push(userId);
+    }
+    if (targetUser?.email && !db.deletedEmails.includes(targetUser.email.toLowerCase())) {
+      db.deletedEmails.push(targetUser.email.toLowerCase());
+    }
+    if (targetUser?.phone && !db.deletedEmails.includes(targetUser.phone.trim())) {
+      db.deletedEmails.push(targetUser.phone.trim());
+    }
+
+    // Remove user permanently from database
+    db.users = db.users.filter(
+      (u: any) =>
+        u.id !== userId &&
+        (!targetUser?.email || u.email?.toLowerCase() !== targetUser.email.toLowerCase())
+    );
+    db.transactions = (db.transactions || []).filter((tx: any) => tx.userId !== userId);
+    db.notifications = (db.notifications || []).filter((n: any) => n.userId !== userId);
+
+    if (!Array.isArray(db.auditLogs)) db.auditLogs = [];
+    db.auditLogs.unshift({
+      id: 'log_' + Date.now(),
+      adminEmail: 'legendxadmin1999@gmail.com',
+      action: 'PERMANENT_ACCOUNT_DELETE',
+      targetUserEmail: targetUser?.email || userId,
+      details: `User account ${targetUser?.name || userId} (${targetUser?.email || 'N/A'}) was permanently purged from database.`,
+      timestamp: new Date().toISOString(),
+      ipAddress: (req.headers['x-forwarded-for'] as string) || req.ip || '127.0.0.1',
+    });
+
+    saveDb(db);
+    console.log(`[USER PERMANENTLY DELETED FROM SERVER DB] User ID: ${userId} (${targetUser?.email})`);
+
+    return res.json({
+      success: true,
+      message: `User ${targetUser?.name || userId} permanently deleted from database.`,
+      users: db.users,
+    });
   });
 
 function getUserReceiveAddressServer(user: any, symbol: string, network?: string): string {
@@ -1686,6 +1691,92 @@ function isAddressMatchingUserServer(
       newBalance: newSenderBal,
       transaction: newTx,
       isInternal,
+      users: db.users,
+      transactions: db.transactions,
+    });
+  });
+
+  // AUTHORITATIVE SWAP ENDPOINT (DEDUCTS FROM-COIN, CREDITS TO-COIN ATOMICALLY)
+  app.post('/api/transfer/swap', (req, res) => {
+    const { userId, fromSymbol, toSymbol, fromAmount, toAmount, feeUsd } = req.body;
+    const numFrom = parseFloat(fromAmount);
+    const numTo = parseFloat(toAmount);
+
+    if (!userId || !fromSymbol || !toSymbol || isNaN(numFrom) || numFrom <= 0 || isNaN(numTo) || numTo <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid swap parameters.' });
+    }
+
+    const db = loadDb();
+    const userIdx = db.users.findIndex((u: any) => u.id === userId);
+    if (userIdx === -1) {
+      return res.status(404).json({ success: false, message: 'User not found in database.' });
+    }
+
+    const user = db.users[userIdx];
+    if (user.isFrozen || user.status === 'suspended') {
+      return res.status(403).json({ success: false, message: 'Your account is frozen or suspended.' });
+    }
+
+    if (!user.balances) user.balances = {};
+    const fromBal = Number(user.balances[fromSymbol] || 0);
+    if (fromBal < numFrom) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient ${fromSymbol} balance (Current balance: ${fromBal} ${fromSymbol}).`,
+      });
+    }
+
+    // Atomic Balance Settlement
+    const newFromBal = Math.max(0, fromBal - numFrom);
+    const newToBal = Number(user.balances[toSymbol] || 0) + numTo;
+
+    user.balances[fromSymbol] = newFromBal;
+    user.balances[toSymbol] = newToBal;
+    db.users[userIdx] = user;
+
+    const now = new Date().toISOString();
+    const txHash = '0x' + crypto.randomBytes(32).toString('hex');
+
+    const swapTx = {
+      id: 'tx_swap_' + Date.now(),
+      userId: user.id,
+      type: 'swap',
+      assetSymbol: fromSymbol,
+      assetName: `${fromSymbol} ➔ ${toSymbol}`,
+      amount: numFrom,
+      amountUsd: numFrom,
+      toAddress: `Received +${numTo.toFixed(6)} ${toSymbol}`,
+      txHash,
+      network: fromSymbol === 'USDT' || fromSymbol === 'TRX' ? 'TRC20' : fromSymbol === 'ETH' ? 'ERC20' : fromSymbol === 'BNB' ? 'BEP20' : 'EVM',
+      feeUsd: feeUsd || 1.85,
+      timestamp: now,
+      status: 'completed',
+      note: `SafePal Instant Swap: ${numFrom} ${fromSymbol} -> ${numTo.toFixed(6)} ${toSymbol}`,
+    };
+
+    if (!Array.isArray(db.transactions)) db.transactions = [];
+    db.transactions.unshift(swapTx);
+
+    if (!Array.isArray(db.notifications)) db.notifications = [];
+    db.notifications.unshift({
+      id: 'notif_' + Date.now(),
+      userId: user.id,
+      title: 'Swap Completed',
+      message: `Successfully swapped ${numFrom} ${fromSymbol} for ${numTo.toFixed(4)} ${toSymbol}.`,
+      type: 'swap',
+      timestamp: now,
+      read: false,
+      recipientEmail: user.email,
+    });
+
+    saveDb(db);
+    console.log(`[SWAP SETTLED] User: ${user.email} | Swapped ${numFrom} ${fromSymbol} for ${numTo} ${toSymbol}`);
+
+    return res.json({
+      success: true,
+      message: `Successfully swapped ${numFrom} ${fromSymbol} for ${numTo.toFixed(4)} ${toSymbol}!`,
+      updatedUser: user,
+      transaction: swapTx,
       users: db.users,
       transactions: db.transactions,
     });

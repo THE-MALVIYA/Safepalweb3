@@ -131,57 +131,76 @@ export const WalletManageModal: React.FC<WalletManageModalProps> = ({ isOpen, on
           </div>
         )}
 
-        {/* Tab 1: Wallets List */}
+        {/* Tab 1: Current Active Wallet */}
         {activeTab === 'wallets' && (
           <div className="space-y-4">
             <div className="space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
-                <span>Active Wallets ({displayWallets.length})</span>
+                <span>Active Keyring Wallet</span>
                 {currentUser && (
-                  <span className="text-[11px] text-blue-400 font-mono">
-                    Logged in as: {currentUser.name}
+                  <span className="text-[11px] text-[#00D084] font-medium flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#00D084]" />
+                    Online & Synced
                   </span>
                 )}
               </div>
 
-              {displayWallets.map((u) => {
-                const isActive = currentUser?.id === u.id;
-
-                return (
-                  <div
-                    key={u.id}
-                    onClick={() => handleSwitchUser(u)}
-                    className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                      isActive
-                        ? 'bg-[#1E2024] border-[#3862FB]/50 shadow-md ring-1 ring-[#3862FB]/20'
-                        : 'bg-[#16181D] border-white/5 hover:bg-[#1E2024] hover:border-white/10'
-                    }`}
-                  >
+              {currentUser ? (
+                <div className="p-4 rounded-2xl bg-[#1E2024] border border-[#3862FB]/40 shadow-lg">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-[#3862FB]/15 text-[#3862FB] border border-[#3862FB]/30">
-                        <Wallet className="h-5 w-5" />
+                      <div className="h-11 w-11 rounded-2xl flex items-center justify-center bg-[#3862FB]/15 text-[#3862FB] border border-[#3862FB]/30">
+                        <Wallet className="h-6 w-6 stroke-[2.2]" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-white">{u.name}</span>
+                        <div className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>{currentUser.name}</span>
+                          <span className="text-[10px] bg-[#3862FB]/20 text-[#3862FB] px-2 py-0.5 rounded-full font-semibold">
+                            Primary
+                          </span>
                         </div>
-                        <span className="text-xs text-slate-400 font-mono">
-                          {u.email && u.email.includes('@') && !u.email.includes('phone.safepal.io') && !u.email.includes('phone.') ? u.email : 'Multi-Coin Wallet'}
-                        </span>
+                        <div className="text-xs text-slate-400 font-mono mt-0.5">
+                          {currentUser.email && currentUser.email.includes('@') && !currentUser.email.includes('phone.safepal.io')
+                            ? currentUser.email
+                            : (currentUser.phone || 'Non-Custodial Multi-Chain Wallet')}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {isActive && (
-                        <div className="flex items-center gap-1 bg-[#3862FB]/15 text-[#3862FB] text-[11px] font-semibold px-2.5 py-1 rounded-full border border-[#3862FB]/30">
-                          <Check className="h-3.5 w-3.5" />
-                          <span>Active</span>
-                        </div>
-                      )}
+                    <div className="flex items-center gap-1 bg-[#00D084]/15 text-[#00D084] text-[11px] font-semibold px-2.5 py-1 rounded-full border border-[#00D084]/30">
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Active</span>
                     </div>
                   </div>
-                );
-              })}
+
+                  {currentUser.seedPhrase && (
+                    <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Recovery Phrase:</span>
+                      <button
+                        onClick={() => setActiveTab('backup')}
+                        className="text-[#3862FB] hover:text-[#5B67F6] font-semibold flex items-center gap-1"
+                      >
+                        <Key className="h-3.5 w-3.5" />
+                        <span>View / Backup Phrase</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-6 rounded-2xl bg-[#16181D] border border-white/5 text-center space-y-3">
+                  <Wallet className="h-10 w-10 text-slate-500 mx-auto" />
+                  <p className="text-xs text-slate-400">No active wallet connected. Sign in or import a wallet to start trading.</p>
+                  <button
+                    onClick={() => {
+                      onClose();
+                      setIsAuthModalOpen(true);
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-[#3862FB] text-white text-xs font-bold hover:bg-[#2D54E5]"
+                  >
+                    Connect / Create Wallet
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Actions Grid */}

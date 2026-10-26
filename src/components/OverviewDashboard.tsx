@@ -7,6 +7,7 @@ import { TokenSearchModal } from './TokenSearchModal';
 import { WalletManageModal } from './WalletManageModal';
 import { BuyCryptoModal } from './BuyCryptoModal';
 import { GasStationModal } from './GasStationModal';
+import { SafePalMoreActionSheet } from './SafePalMoreActionSheet';
 import {
   Bell,
   Scan,
@@ -36,6 +37,7 @@ export const OverviewDashboard: React.FC = () => {
     currentUser,
     assets,
     watchlist,
+    formatFiat,
     setActiveTab,
     setIsSendModalOpen,
     setIsReceiveModalOpen,
@@ -43,6 +45,9 @@ export const OverviewDashboard: React.FC = () => {
     setIsWeb3ModalOpen,
     setIsAuthModalOpen,
     setIsNotificationDrawerOpen,
+    setIsCameraScannerOpen,
+    isMoreMenuOpen,
+    setIsMoreMenuOpen,
   } = useWallet();
 
   const [selectedCoinForDetail, setSelectedCoinForDetail] = useState<CryptoAsset | null>(null);
@@ -50,7 +55,6 @@ export const OverviewDashboard: React.FC = () => {
   const [isWalletManageOpen, setIsWalletManageOpen] = useState(false);
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [isGasStationOpen, setIsGasStationOpen] = useState(false);
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [activeTopTab, setActiveTopTab] = useState<'Coin' | 'Earn' | 'NFT'>('Coin');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNetworkFilter, setSelectedNetworkFilter] = useState<string>('All');
@@ -192,6 +196,17 @@ export const OverviewDashboard: React.FC = () => {
           : (networkTag || '').toLowerCase().includes(selectedNetworkFilter.toLowerCase()) ||
             (asset.network || '').toLowerCase().includes(selectedNetworkFilter.toLowerCase());
 
+      // Respect watchlist toggle switch - if disabled/unselected, remove coin from main wallet screen
+      const symUpper = (asset.symbol || '').toUpperCase().trim();
+      const isTokenEnabled =
+        watchlist.includes(symUpper) ||
+        watchlist.includes(asset.symbol) ||
+        watchlist.includes(asset.id);
+
+      if (!isTokenEnabled) {
+        return false;
+      }
+
       return matchesSearch && matchesNetwork;
     })
     .sort((a, b) => {
@@ -308,9 +323,9 @@ export const OverviewDashboard: React.FC = () => {
           {/* Right: Scan / QR Code Button */}
           <div className="flex items-center">
             <button
-              onClick={() => setIsWeb3ModalOpen(true)}
+              onClick={() => setIsCameraScannerOpen(true)}
               className="text-white hover:text-slate-300 transition-colors p-1"
-              title="Scan QR Code"
+              title="Scan QR Code via Camera"
               id="safepal-scan-btn"
             >
               <svg
@@ -397,7 +412,7 @@ export const OverviewDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Middle: Clean "$0" */}
+          {/* Middle: Clean "$0" or converted fiat */}
           <div
             onClick={toggleBalanceVisibility}
             className="text-[52px] sm:text-[56px] font-semibold text-white tracking-tight leading-tight my-1 cursor-pointer select-none"
@@ -405,8 +420,8 @@ export const OverviewDashboard: React.FC = () => {
             {isBalanceHidden
               ? '••••'
               : computedTotalUsd === 0
-              ? '$0'
-              : `$${computedTotalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              ? formatFiat(0)
+              : formatFiat(computedTotalUsd)}
           </div>
 
           {/* Bottom: "0 BTC" */}
@@ -567,13 +582,8 @@ export const OverviewDashboard: React.FC = () => {
             const usdVal = userBal * asset.priceUsd;
             const isNegative = asset.change24h < 0;
 
-            // Formatted price with comma
-            const formattedPrice =
-              asset.priceUsd >= 1000
-                ? `$${asset.priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                : asset.priceUsd >= 1
-                ? `$${asset.priceUsd.toFixed(2)}`
-                : `$${asset.priceUsd.toFixed(4)}`;
+            // Formatted price using selected fiat
+            const formattedPrice = formatFiat(asset.priceUsd);
 
             // Percentage change in red or green
             const changeStr = `${asset.change24h >= 0 ? '+' : ''}${asset.change24h.toFixed(2)}%`;
@@ -630,13 +640,13 @@ export const OverviewDashboard: React.FC = () => {
                       : userBal.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                   </div>
 
-                  {/* USD Value: $0 */}
+                  {/* USD / Fiat Value */}
                   <div className="text-[13px] text-[#7C7D86] font-mono mt-0.5">
                     {isBalanceHidden
                       ? '••••'
                       : usdVal === 0
-                      ? '$0'
-                      : `$${usdVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      ? formatFiat(0)
+                      : formatFiat(usdVal)}
                   </div>
                 </div>
               </div>
@@ -655,90 +665,11 @@ export const OverviewDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* ================= MORE OPTIONS BOTTOM SHEET ================= */}
-      {isMoreMenuOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-[#16171B] border border-white/10 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-3 animate-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <h3 className="text-base font-bold text-white">SafePal Tools & Services</h3>
-              <button
-                onClick={() => setIsMoreMenuOpen(false)}
-                className="h-8 w-8 rounded-full bg-[#202127] text-slate-400 hover:text-white flex items-center justify-center"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 pt-2">
-              <button
-                onClick={() => {
-                  setIsMoreMenuOpen(false);
-                  setActiveTab('history');
-                }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#202127] hover:bg-[#282933] transition-colors"
-              >
-                <History className="h-6 w-6 text-[#00D084]" />
-                <span className="text-xs font-medium text-white mt-1.5">History</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsMoreMenuOpen(false);
-                  setActiveTab('swap');
-                }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#202127] hover:bg-[#282933] transition-colors"
-              >
-                <Sparkles className="h-6 w-6 text-[#4353FA]" />
-                <span className="text-xs font-medium text-white mt-1.5">Swap / Bridge</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsMoreMenuOpen(false);
-                  setActiveTab('staking');
-                }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#202127] hover:bg-[#282933] transition-colors"
-              >
-                <Layers className="h-6 w-6 text-amber-400" />
-                <span className="text-xs font-medium text-white mt-1.5">SafePal Earn</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsMoreMenuOpen(false);
-                  setIsGasStationOpen(true);
-                }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#202127] hover:bg-[#282933] transition-colors"
-              >
-                <Fuel className="h-6 w-6 text-orange-400" />
-                <span className="text-xs font-medium text-white mt-1.5">Gas Station</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsMoreMenuOpen(false);
-                  setIsWeb3ModalOpen(true);
-                }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#202127] hover:bg-[#282933] transition-colors"
-              >
-                <Shield className="h-6 w-6 text-blue-400" />
-                <span className="text-xs font-medium text-white mt-1.5">Hardware / Web3</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsMoreMenuOpen(false);
-                  setActiveTab('settings');
-                }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-[#202127] hover:bg-[#282933] transition-colors"
-              >
-                <Lock className="h-6 w-6 text-purple-400" />
-                <span className="text-xs font-medium text-white mt-1.5">Security</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ================= EXACT SAFEPAL MORE BOTTOM SHEET (PHOTO 2) ================= */}
+      <SafePalMoreActionSheet
+        isOpen={isMoreMenuOpen}
+        onClose={() => setIsMoreMenuOpen(false)}
+      />
 
       {/* ================= MODALS & BOTTOM SHEETS ================= */}
       <TokenDetailModal

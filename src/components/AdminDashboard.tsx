@@ -99,24 +99,16 @@ export const AdminDashboard: React.FC = () => {
     currentUser?.email.toLowerCase() === 'legendxadmin1999@gmail.com' &&
     currentUser?.role === 'admin';
 
+  const { setActiveTab: setMainTab } = useWallet();
+
+  useEffect(() => {
+    if (!isAdminAuthorized) {
+      setMainTab('overview');
+    }
+  }, [isAdminAuthorized, setMainTab]);
+
   if (!isAdminAuthorized) {
-    return (
-      <div className="mx-auto max-w-xl py-20 px-4 text-center animate-fadeIn">
-        <div className="mx-auto h-16 w-16 rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-4 shadow-xl">
-          <ShieldCheck className="h-8 w-8" />
-        </div>
-        <h2 className="text-2xl font-black text-white">Super Admin Verification Required</h2>
-        <p className="text-xs text-slate-400 mt-2 max-w-md mx-auto">
-          The Admin Portal is locked and protected. Please sign in with your official Super Administrator credentials (<span className="text-[#38B6FF] font-mono">legendxadmin1999@gmail.com</span>) to proceed.
-        </p>
-        <button
-          onClick={() => setIsAuthModalOpen(true)}
-          className="mt-6 px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-black text-xs transition-all shadow-xl shadow-amber-500/20 hover:opacity-90"
-        >
-          Sign In as Super Admin
-        </button>
-      </div>
-    );
+    return null;
   }
 
   const [activeTab, setActiveTab] = useState<

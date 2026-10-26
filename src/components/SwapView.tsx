@@ -360,8 +360,17 @@ export const SwapView: React.FC = () => {
             <form onSubmit={handleExecuteSwap} className="space-y-3">
               {/* FROM TOKEN BOX */}
               <div className="rounded-2xl bg-[#16181D] border border-white/10 p-4 transition-all hover:border-white/20">
-                <div className="flex justify-between text-xs text-slate-400 mb-2">
-                  <span>Pay</span>
+                <div className="flex justify-between items-center text-xs text-slate-400 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span>Pay</span>
+                    <button
+                      type="button"
+                      onClick={() => setFromAmount(String(userFromBalance))}
+                      className="px-1.5 py-0.5 rounded bg-[#3862FB]/20 text-[#38B6FF] hover:bg-[#3862FB]/30 text-[10px] font-bold uppercase transition-colors"
+                    >
+                      MAX
+                    </button>
+                  </div>
                   <span>
                     Balance:{' '}
                     <span className="text-white font-mono font-bold">

@@ -10,6 +10,11 @@ import {
   AuditLog,
   FaqItem,
   PlatformTrafficConfig,
+  FiatCurrency,
+  ThemeMode,
+  LiveTransactionToastData,
+  LiveTxType,
+  LiveTxStage,
 } from '../types';
 import {
   INITIAL_ASSETS,
@@ -22,6 +27,18 @@ import {
   INITIAL_AUDIT_LOGS,
   FAQ_ITEMS,
 } from '../data/mockData';
+
+export const FIAT_RATES: Record<FiatCurrency, { rate: number; symbol: string; prefix: string; name: string }> = {
+  USD: { rate: 1.0, symbol: '$', prefix: '$', name: 'US Dollar' },
+  INR: { rate: 86.5, symbol: '₹', prefix: '₹', name: 'Indian Rupee' },
+  EUR: { rate: 0.92, symbol: '€', prefix: '€', name: 'Euro' },
+  GBP: { rate: 0.79, symbol: '£', prefix: '£', name: 'British Pound' },
+  JPY: { rate: 155.0, symbol: '¥', prefix: '¥', name: 'Japanese Yen' },
+  AED: { rate: 3.67, symbol: 'AED', prefix: 'AED ', name: 'UAE Dirham' },
+  CNY: { rate: 7.25, symbol: '¥', prefix: '¥', name: 'Chinese Yuan' },
+  CAD: { rate: 1.39, symbol: 'C$', prefix: 'C$', name: 'Canadian Dollar' },
+  AUD: { rate: 1.54, symbol: 'A$', prefix: 'A$', name: 'Australian Dollar' },
+};
 
 export type ViewTab =
   | 'landing'
@@ -191,6 +208,23 @@ interface WalletContextType {
   watchlist: string[];
   theme: 'dark' | 'light';
   toggleTheme: () => void;
+  fiatCurrency: FiatCurrency;
+  setFiatCurrency: (fiat: FiatCurrency) => void;
+  formatFiat: (usdAmount: number) => string;
+  fiatSymbol: string;
+  fiatRate: number;
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
+  isCameraScannerOpen: boolean;
+  setIsCameraScannerOpen: (open: boolean) => void;
+  isBiometricsEnabled: boolean;
+  setIsBiometricsEnabled: (enabled: boolean) => void;
+  isBiometricLockOpen: boolean;
+  setIsBiometricLockOpen: (open: boolean) => void;
+  appPin: string;
+  setAppPin: (pin: string) => void;
+  isMoreMenuOpen: boolean;
+  setIsMoreMenuOpen: (open: boolean) => void;
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
   isSendModalOpen: boolean;
@@ -201,6 +235,18 @@ interface WalletContextType {
   setSelectedAssetForModal: (asset: CryptoAsset | null) => void;
   isNotificationDrawerOpen: boolean;
   setIsNotificationDrawerOpen: (open: boolean) => void;
+  activeLiveToast: LiveTransactionToastData | null;
+  triggerLiveToast: (params: {
+    type: LiveTxType;
+    amount: number;
+    symbol: string;
+    network?: string;
+    txHash?: string;
+    toAddress?: string;
+    fromAddress?: string;
+    note?: string;
+  }) => void;
+  dismissLiveToast: () => void;
   isConnectedToWeb3: boolean;
   web3Address: string | null;
   web3ChainId: string | null;
@@ -348,6 +394,80 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ViewTab>('overview');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  // Fiat Currency System (USD, INR, EUR, GBP, JPY, AED, CNY, CAD, AUD)
+  const [fiatCurrency, setFiatCurrencyState] = useState<FiatCurrency>(() => {
+    return (localStorage.getItem('safepal_fiat_currency') as FiatCurrency) || 'USD';
+  });
+
+  const setFiatCurrency = (fiat: FiatCurrency) => {
+    setFiatCurrencyState(fiat);
+    try {
+      localStorage.setItem('safepal_fiat_currency', fiat);
+    } catch (e) {}
+  };
+
+  const fiatInfo = FIAT_RATES[fiatCurrency] || FIAT_RATES['USD'];
+  const fiatRate = fiatInfo.rate;
+  const fiatSymbol = fiatInfo.symbol;
+
+  const formatFiat = (usdAmount: number) => {
+    const converted = usdAmount * fiatRate;
+    if (fiatCurrency === 'JPY') {
+      return `${fiatSymbol}${Math.round(converted).toLocaleString()}`;
+    }
+    if (fiatCurrency === 'INR') {
+      return `${fiatSymbol}${converted.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    if (fiatCurrency === 'AED') {
+      return `AED ${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `${fiatSymbol}${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Appearance / Theme Mode System ('dark' | 'oled' | 'navy' | 'light')
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
+    return (localStorage.getItem('safepal_theme_mode') as ThemeMode) || 'dark';
+  });
+
+  const setThemeMode = (mode: ThemeMode) => {
+    setThemeModeState(mode);
+    try {
+      localStorage.setItem('safepal_theme_mode', mode);
+      if (mode === 'light') {
+        setTheme('light');
+      } else {
+        setTheme('dark');
+      }
+    } catch (e) {}
+  };
+
+  // Mobile APK Camera QR Scanner & SafePal Action Sheet
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+
+  // Mobile APK Fingerprint Biometrics & 6-Digit PIN App Lock
+  const [isBiometricsEnabled, setIsBiometricsEnabledState] = useState<boolean>(() => {
+    return localStorage.getItem('safepal_biometrics_enabled') === 'true';
+  });
+  const setIsBiometricsEnabled = (enabled: boolean) => {
+    setIsBiometricsEnabledState(enabled);
+    try {
+      localStorage.setItem('safepal_biometrics_enabled', String(enabled));
+    } catch (e) {}
+  };
+
+  const [isBiometricLockOpen, setIsBiometricLockOpen] = useState(false);
+  const [appPin, setAppPinState] = useState<string>(() => {
+    return localStorage.getItem('safepal_security_pin') || '123456';
+  });
+  const setAppPin = (pin: string) => {
+    setAppPinState(pin);
+    try {
+      localStorage.setItem('safepal_security_pin', pin);
+    } catch (e) {}
+  };
+
   const [watchlist, setWatchlist] = useState<string[]>(() => {
     const saved = localStorage.getItem('trustpro_watchlist_v2');
     if (saved) {
@@ -375,6 +495,144 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
   const [selectedAssetForModal, setSelectedAssetForModal] = useState<CryptoAsset | null>(null);
   const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
+
+  // Trust Wallet Style 30-Second Live Transaction Toast Progression
+  const [activeLiveToast, setActiveLiveToast] = useState<LiveTransactionToastData | null>(null);
+  const liveToastTimersRef = React.useRef<{
+    processingTimeout?: any;
+    successTimeout?: any;
+    dismissTimeout?: any;
+  }>({});
+
+  const clearLiveToastTimers = () => {
+    if (liveToastTimersRef.current.processingTimeout) clearTimeout(liveToastTimersRef.current.processingTimeout);
+    if (liveToastTimersRef.current.successTimeout) clearTimeout(liveToastTimersRef.current.successTimeout);
+    if (liveToastTimersRef.current.dismissTimeout) clearTimeout(liveToastTimersRef.current.dismissTimeout);
+  };
+
+  const dismissLiveToast = () => {
+    clearLiveToastTimers();
+    setActiveLiveToast(null);
+  };
+
+  const triggerLiveToast = (params: {
+    type: LiveTxType;
+    amount: number;
+    symbol: string;
+    network?: string;
+    txHash?: string;
+    toAddress?: string;
+    fromAddress?: string;
+    note?: string;
+  }) => {
+    clearLiveToastTimers();
+
+    const toastId = 'toast_' + Date.now();
+    const cleanNetwork = params.network || (params.symbol === 'USDT' || params.symbol === 'TRX' ? 'TRC20' : 'ERC20');
+    const genTxHash = params.txHash || '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+
+    const initialToast: LiveTransactionToastData = {
+      id: toastId,
+      type: params.type,
+      stage: 'pending',
+      amount: params.amount,
+      symbol: params.symbol,
+      network: cleanNetwork,
+      txHash: genTxHash,
+      toAddress: params.toAddress,
+      fromAddress: params.fromAddress,
+      confirmations: 0,
+      maxConfirmations: 12,
+      startedAt: Date.now(),
+      durationMs: 30000,
+      title:
+        params.type === 'deposit'
+          ? 'Incoming Deposit Pending...'
+          : params.type === 'withdraw'
+          ? 'Withdrawal Pending...'
+          : params.type === 'send'
+          ? 'Broadcasting Transfer...'
+          : 'Swap Order Submitted...',
+      subtitle:
+        params.type === 'deposit'
+          ? `Detecting +${params.amount} ${params.symbol} on ${cleanNetwork}...`
+          : params.type === 'withdraw'
+          ? `Dispatching -${params.amount} ${params.symbol} on ${cleanNetwork}...`
+          : params.type === 'send'
+          ? `Mempool validating -${params.amount} ${params.symbol}...`
+          : `Routing order across DEX pools...`,
+    };
+
+    setActiveLiveToast(initialToast);
+
+    // Haptic vibration on devices
+    if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+      try {
+        (navigator as any).vibrate([50, 30, 50]);
+      } catch (e) {}
+    }
+
+    // Step 2: At 4.5 seconds -> Processing / Confirming (4/12)
+    liveToastTimersRef.current.processingTimeout = setTimeout(() => {
+      setActiveLiveToast((prev) => {
+        if (!prev || prev.id !== toastId) return prev;
+        return {
+          ...prev,
+          stage: 'processing',
+          confirmations: 4,
+          title:
+            params.type === 'deposit'
+              ? 'Confirming Deposit (4/12)...'
+              : params.type === 'withdraw'
+              ? 'Confirming Withdrawal (4/12)...'
+              : params.type === 'send'
+              ? 'Confirming Block (4/12)...'
+              : 'Processing Swap (4/12)...',
+          subtitle: `Node consensus validation in progress on ${cleanNetwork}...`,
+        };
+      });
+    }, 4500);
+
+    // Step 3: At 8.5 seconds -> Success / Completed (12/12)
+    liveToastTimersRef.current.successTimeout = setTimeout(() => {
+      setActiveLiveToast((prev) => {
+        if (!prev || prev.id !== toastId) return prev;
+        return {
+          ...prev,
+          stage: 'success',
+          confirmations: 12,
+          title:
+            params.type === 'deposit'
+              ? 'Deposit Completed! 🎉'
+              : params.type === 'withdraw'
+              ? 'Withdrawal Successful! ✅'
+              : params.type === 'send'
+              ? 'Transfer Completed! ✅'
+              : 'Swap Completed! ⚡',
+          subtitle:
+            params.type === 'deposit'
+              ? `+${params.amount} ${params.symbol} credited to your SafePal Wallet!`
+              : params.type === 'withdraw'
+              ? `-${params.amount} ${params.symbol} sent to destination!`
+              : params.type === 'send'
+              ? `-${params.amount} ${params.symbol} successfully delivered!`
+              : `Received ${params.symbol} into wallet!`,
+        };
+      });
+
+      // Subtle vibration on completion
+      if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+        try {
+          (navigator as any).vibrate([80, 50, 80]);
+        } catch (e) {}
+      }
+    }, 8500);
+
+    // Step 4: Full 30-Second Life Span (auto-closes at 30 seconds as explicitly requested by user)
+    liveToastTimersRef.current.dismissTimeout = setTimeout(() => {
+      setActiveLiveToast((prev) => (prev?.id === toastId ? null : prev));
+    }, 30000);
+  };
 
   // Web3 Connection Provider State
   const [isConnectedToWeb3, setIsConnectedToWeb3] = useState<boolean>(() => {
@@ -556,12 +814,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const [users, setUsers] = useState<UserAccount[]>(() => {
+    let deletedList: string[] = [];
+    try {
+      deletedList = JSON.parse(localStorage.getItem('safepal_deleted_users') || '[]');
+    } catch (e) {}
+
     const saved = localStorage.getItem('trustpro_users_v2');
     let loadedUsers: UserAccount[] = INITIAL_USERS;
     if (saved) {
       try {
         const parsed: UserAccount[] = JSON.parse(saved);
-        const cleaned = parsed.filter((u) => !['usr_001', 'usr_002', 'usr_003', 'usr_official'].includes(u.id));
+        const cleaned = parsed.filter(
+          (u) =>
+            u &&
+            u.id &&
+            !['usr_001', 'usr_002', 'usr_003', 'usr_official', 'usr_alex_01', 'usr_rohit_02'].includes(u.id) &&
+            !deletedList.includes(u.id) &&
+            (!u.email || !deletedList.includes(u.email.toLowerCase()))
+        );
         if (cleaned.length > 0) loadedUsers = cleaned;
       } catch (e) {
         console.warn('Failed to parse saved users:', e);
@@ -582,16 +852,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (isExplicitlyLoggedOut) {
       return null;
     }
+
+    let deletedList: string[] = [];
+    try {
+      deletedList = JSON.parse(localStorage.getItem('safepal_deleted_users') || '[]');
+    } catch (e) {}
+
     const saved = localStorage.getItem('trustpro_curr_user_v2');
     if (saved) {
       try {
         const parsed: UserAccount = JSON.parse(saved);
         if (
-          ['usr_001', 'usr_002', 'usr_003', 'usr_official', 'usr_1786907818697gu05'].includes(parsed.id) ||
-          parsed.email?.toLowerCase() === 'testing2@gmail.com'
+          !parsed ||
+          !parsed.id ||
+          ['usr_001', 'usr_002', 'usr_003', 'usr_official', 'usr_1786907818697gu05', 'usr_alex_01', 'usr_rohit_02'].includes(parsed.id) ||
+          parsed.email?.toLowerCase() === 'testing2@gmail.com' ||
+          deletedList.includes(parsed.id) ||
+          (parsed.email && deletedList.includes(parsed.email.toLowerCase()))
         ) {
           localStorage.removeItem('trustpro_curr_user_v2');
           localStorage.removeItem('trustpro_curr_user_id');
+          localStorage.removeItem('safepal_curr_user_v2');
           return null;
         }
         return parsed;
@@ -599,7 +880,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.warn('Failed to parse current user:', e);
       }
     }
-    // Fresh unauthenticated user starts with clean state (not mock demo)
     return null;
   });
 
@@ -915,13 +1195,22 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const toggleWatchlist = (symbol: string) => {
     const sym = symbol.toUpperCase().trim();
     setWatchlist((prev) => {
-      const next = prev.includes(sym) ? prev.filter((s) => s !== sym) : [...prev, sym];
+      const isCurrentlyIn = prev.includes(sym);
+      const next = isCurrentlyIn ? prev.filter((s) => s !== sym) : [...prev, sym];
       try {
         localStorage.setItem('trustpro_watchlist_v2', JSON.stringify(next));
       } catch (e) {
         console.warn(e);
       }
       return next;
+    });
+
+    setAssets((prev) => {
+      const updated = prev.map((a) => (a.symbol.toUpperCase() === sym ? { ...a, enabled: !a.enabled } : a));
+      try {
+        localStorage.setItem('trustpro_assets_v2', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
     });
   };
 
@@ -1866,6 +2155,17 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     );
 
+    // Trigger Trust Wallet Style 30-Second Live Toast (Pending -> Processing -> Success)
+    triggerLiveToast({
+      type: 'deposit',
+      amount,
+      symbol,
+      network: depositNetwork,
+      txHash,
+      fromAddress: 'External Gateway / Wallet',
+      toAddress: depositAddr,
+    });
+
     return {
       success: true,
       message: `Deposit request of +${amount} ${symbol} logged! Status: Pending (24-Hour timer running).`,
@@ -1948,6 +2248,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
         );
 
+        // Trigger Trust Wallet Style 30-Second Live Toast for outgoing transfer
+        triggerLiveToast({
+          type: 'send',
+          amount,
+          symbol: assetSymbol,
+          network: network || 'TRC20',
+          txHash,
+          toAddress: toAddress.trim(),
+        });
+
         return {
           success: true,
           message: data.message || `Transferred ${amount} ${assetSymbol} successfully!`,
@@ -2007,6 +2317,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       `Sent ${amount} ${assetSymbol} ($${amountUsd.toFixed(2)}) to ${toAddress.slice(0, 10)}...`,
       'withdraw'
     );
+
+    // Trigger Trust Wallet Style 30-Second Live Toast for outgoing transfer
+    triggerLiveToast({
+      type: 'send',
+      amount,
+      symbol: assetSymbol,
+      network: network || 'TRC20',
+      txHash,
+      toAddress: toAddress.trim(),
+    });
 
     return {
       success: true,
@@ -2122,44 +2442,72 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     toAmount: number
   ) => {
     if (!currentUser) return { success: false, message: 'Please log in to swap.' };
-    const fromBalance = currentUser.balances[fromSymbol] || 0;
+    const fromBalance = Number(currentUser.balances?.[fromSymbol] || 0);
     if (fromBalance < fromAmount) {
-      return { success: false, message: `Insufficient ${fromSymbol} balance.` };
+      return { success: false, message: `Insufficient ${fromSymbol} balance (Current balance: ${fromBalance} ${fromSymbol}).` };
     }
 
     const fromAsset = assets.find((a) => a.symbol === fromSymbol);
 
     const updatedBalances = {
       ...currentUser.balances,
-      [fromSymbol]: fromBalance - fromAmount,
-      [toSymbol]: (currentUser.balances[toSymbol] || 0) + toAmount,
+      [fromSymbol]: Math.max(0, fromBalance - fromAmount),
+      [toSymbol]: Number(currentUser.balances?.[toSymbol] || 0) + toAmount,
     };
     const updatedUser = { ...currentUser, balances: updatedBalances };
 
     setCurrentUser(updatedUser);
+    saveDeviceWallet(updatedUser);
+    try {
+      localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(updatedUser));
+      localStorage.setItem('safepal_curr_user_v2', JSON.stringify(updatedUser));
+    } catch (e) {}
+
     const updatedUsers = users.map((u) => (u.id === currentUser.id ? updatedUser : u));
     setUsers(updatedUsers);
 
     const txHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
     const newTx: Transaction = {
-      id: 'tx_' + Date.now(),
+      id: 'tx_swap_' + Date.now(),
       userId: currentUser.id,
       type: 'swap',
       assetSymbol: fromSymbol,
-      assetName: `${fromSymbol} -> ${toSymbol}`,
+      assetName: `${fromSymbol} ➔ ${toSymbol}`,
       amount: fromAmount,
       amountUsd: fromAmount * (fromAsset?.priceUsd || 1),
-      toAddress: `Swapped for ${toAmount.toFixed(4)} ${toSymbol}`,
+      toAddress: `Received +${toAmount.toFixed(4)} ${toSymbol}`,
       txHash,
       network: fromAsset?.network || 'EVM',
-      feeUsd: 2.5,
+      feeUsd: 1.85,
       timestamp: new Date().toISOString(),
       status: 'completed',
+      note: `Instant Swap ${fromAmount} ${fromSymbol} ➔ ${toAmount.toFixed(4)} ${toSymbol}`,
     };
     const updatedTx = [newTx, ...transactions];
     setTransactions(updatedTx);
 
     saveToServer({ users: updatedUsers, transactions: updatedTx });
+
+    // Server-authoritative sync call
+    fetch('/api/transfer/swap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser.id,
+        fromSymbol,
+        toSymbol,
+        fromAmount,
+        toAmount,
+        feeUsd: 1.85,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.users) {
+          setUsers(data.users);
+        }
+      })
+      .catch((err) => console.warn('Swap backend call notice:', err));
 
     addNotification(
       currentUser.id,
@@ -2172,7 +2520,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     );
 
-    return { success: true, message: 'Swap executed successfully!', txHash };
+    // Trigger Trust Wallet Style 30-Second Live Toast for Swap
+    triggerLiveToast({
+      type: 'swap',
+      amount: fromAmount,
+      symbol: `${fromSymbol}➔${toSymbol}`,
+      network: fromAsset?.network || 'EVM',
+      txHash,
+    });
+
+    return { success: true, message: `Swapped ${fromAmount} ${fromSymbol} for ${toAmount.toFixed(4)} ${toSymbol}!`, txHash };
   };
 
   // Staking Operations
@@ -2606,15 +2963,42 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const targetUser = users.find((u) => u.id === userId);
     if (!targetUser) return { success: false, message: 'User account not found.' };
 
-    if (targetUser.email.toLowerCase() === 'legendxadmin1999@gmail.com') {
+    if (targetUser.email && targetUser.email.toLowerCase() === 'legendxadmin1999@gmail.com') {
       return { success: false, message: 'Primary Platform Administrator account (legendxadmin1999@gmail.com) cannot be deleted.' };
     }
 
-    // Remove user permanently from state and storage
-    const updatedUsers = users.filter((u) => u.id !== userId);
+    // 1. Remove user permanently from in-memory state
+    const updatedUsers = users.filter(
+      (u) => u.id !== userId && (!targetUser.email || u.email?.toLowerCase() !== targetUser.email.toLowerCase())
+    );
     setUsers(updatedUsers);
     removeDeviceWallet(userId);
 
+    // 2. Clear all local storage references immediately
+    try {
+      localStorage.setItem('trustpro_users_v2', JSON.stringify(updatedUsers));
+      localStorage.setItem('safepal_all_users_v2', JSON.stringify(updatedUsers));
+
+      const deletedList: string[] = JSON.parse(localStorage.getItem('safepal_deleted_users') || '[]');
+      if (!deletedList.includes(userId)) deletedList.push(userId);
+      if (targetUser.email && !deletedList.includes(targetUser.email.toLowerCase())) {
+        deletedList.push(targetUser.email.toLowerCase());
+      }
+      localStorage.setItem('safepal_deleted_users', JSON.stringify(deletedList));
+
+      // Remove from device wallets in localStorage
+      const savedWallets = localStorage.getItem('trustpro_device_wallets_v3');
+      if (savedWallets) {
+        const parsed = JSON.parse(savedWallets).filter(
+          (w: any) => w.id !== userId && (!targetUser.email || w.email?.toLowerCase() !== targetUser.email.toLowerCase())
+        );
+        localStorage.setItem('trustpro_device_wallets_v3', JSON.stringify(parsed));
+      }
+    } catch (e) {
+      console.warn('Storage delete cleanup notice:', e);
+    }
+
+    // 3. Call authoritative Server Database deletion endpoint
     fetch('/api/users/delete', {
       method: 'POST',
       headers: {
@@ -2622,33 +3006,50 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         'x-admin-email': 'legendxadmin1999@gmail.com',
         'x-admin-auth': 'Joshi$12legend',
       },
-      body: JSON.stringify({ userId }),
-    }).catch(() => {});
+      body: JSON.stringify({
+        userId,
+        adminEmail: 'legendxadmin1999@gmail.com',
+        adminPass: 'Joshi$12legend',
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.users && Array.isArray(data.users)) {
+          setUsers(data.users);
+          try {
+            localStorage.setItem('trustpro_users_v2', JSON.stringify(data.users));
+          } catch (e) {}
+        }
+      })
+      .catch((err) => console.warn('Server delete request notice:', err));
 
-    saveToServer({ users: updatedUsers });
-
-    // Remove all transactions associated with this user
+    // 4. Remove all transactions & staking positions associated with this user
     setTransactions((prev) => prev.filter((tx) => tx.userId !== userId));
-
-    // Remove all staking positions associated with this user
     setStakingPositions((prev) => prev.filter((sp) => sp.userId !== userId));
 
-    // If deleted user was currently logged in, force logout
-    if (currentUser?.id === userId) {
+    // 5. If the deleted user is currently logged in, force instant logout
+    if (
+      currentUser?.id === userId ||
+      (currentUser?.email && targetUser.email && currentUser.email.toLowerCase() === targetUser.email.toLowerCase())
+    ) {
       setCurrentUser(null);
-      localStorage.removeItem('trustpro_curr_user_v2');
-      localStorage.removeItem('trustpro_curr_user_id');
+      try {
+        localStorage.removeItem('trustpro_curr_user_v2');
+        localStorage.removeItem('trustpro_curr_user_id');
+        localStorage.removeItem('safepal_curr_user_v2');
+        localStorage.setItem('trustpro_logged_out', 'true');
+      } catch (e) {}
     }
 
     addAuditLog(
       'PERMANENT_ACCOUNT_DELETE',
       targetUser.email,
-      `User account ${targetUser.name} (${targetUser.email}) was permanently deleted by admin.`
+      `User account ${targetUser.name} (${targetUser.email}) was permanently purged from all databases.`
     );
 
     return {
       success: true,
-      message: `Account for ${targetUser.name} (${targetUser.email}) permanently deleted!`,
+      message: `Account for ${targetUser.name} (${targetUser.email}) permanently deleted from database!`,
     };
   };
 
@@ -2717,16 +3118,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const toggleAssetEnabled = (assetId: string) => {
-    setAssets((prev) =>
-      prev.map((a) => (a.id === assetId ? { ...a, enabled: !a.enabled } : a))
-    );
+    const target = assets.find((a) => a.id === assetId);
+    if (target) {
+      toggleWatchlist(target.symbol);
+    } else {
+      setAssets((prev) =>
+        prev.map((a) => (a.id === assetId ? { ...a, enabled: !a.enabled } : a))
+      );
+    }
   };
 
-  const switchUserRole = (role: 'user' | 'admin') => {
-    const found = users.find((u) => u.role === role);
-    if (found) {
-      setCurrentUser(found);
-    }
+  const switchUserRole = (_role: 'user' | 'admin') => {
+    // Disabled for security - role switching is strictly forbidden
   };
 
   const updateUserProfileAvatar = (avatarDataUrl: string) => {
@@ -2762,6 +3165,23 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         watchlist,
         theme,
         toggleTheme,
+        fiatCurrency,
+        setFiatCurrency,
+        formatFiat,
+        fiatSymbol,
+        fiatRate,
+        themeMode,
+        setThemeMode,
+        isCameraScannerOpen,
+        setIsCameraScannerOpen,
+        isBiometricsEnabled,
+        setIsBiometricsEnabled,
+        isBiometricLockOpen,
+        setIsBiometricLockOpen,
+        appPin,
+        setAppPin,
+        isMoreMenuOpen,
+        setIsMoreMenuOpen,
         isAuthModalOpen,
         setIsAuthModalOpen,
         isSendModalOpen,
@@ -2772,6 +3192,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSelectedAssetForModal,
         isNotificationDrawerOpen,
         setIsNotificationDrawerOpen,
+        activeLiveToast,
+        triggerLiveToast,
+        dismissLiveToast,
         isConnectedToWeb3,
         web3Address,
         web3ChainId,

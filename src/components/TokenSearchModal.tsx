@@ -24,7 +24,7 @@ export const TokenSearchModal: React.FC<TokenSearchModalProps> = ({
   onClose,
   onSelectToken,
 }) => {
-  const { assets, watchlist, toggleWatchlist } = useWallet();
+  const { assets, watchlist, toggleWatchlist, formatFiat } = useWallet();
   const [query, setQuery] = useState('');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('all');
   const [customTokenOpen, setCustomTokenOpen] = useState(false);
@@ -130,7 +130,8 @@ export const TokenSearchModal: React.FC<TokenSearchModalProps> = ({
             </div>
           ) : (
             filteredAssets.map((asset) => {
-              const isEnabled = watchlist.includes(asset.symbol);
+              const symUpper = (asset.symbol || '').toUpperCase().trim();
+              const isEnabled = watchlist.includes(symUpper) || watchlist.includes(asset.symbol) || watchlist.includes(asset.id);
 
               return (
                 <div
@@ -157,7 +158,7 @@ export const TokenSearchModal: React.FC<TokenSearchModalProps> = ({
                         <span className="text-xs text-slate-400 font-mono uppercase">{asset.symbol}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <span>${asset.priceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+                        <span>{formatFiat(asset.priceUsd)}</span>
                         <span
                           className={`font-semibold ${
                             asset.change24h >= 0 ? 'text-[#38B6FF]' : 'text-[#F6465D]'

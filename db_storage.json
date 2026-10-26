@@ -140,5 +140,7 @@
     "systemStatus": "OPERATIONAL",
     "tickerNotice": "All Web3 nodes, liquidity pools & cross-chain bridges operating at 100% capacity.",
     "autoFluctuate": true
-  }
+  },
+  "deletedUserIds": [],
+  "deletedEmails": []
 }

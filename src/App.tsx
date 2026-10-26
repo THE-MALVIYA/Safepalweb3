@@ -7,7 +7,9 @@ import { MarketsView } from './components/MarketsView';
 import { SwapView } from './components/SwapView';
 import { StakingView } from './components/StakingView';
 import { NftGalleryView } from './components/NftGalleryView';
-import { DefiView } from './components/DefiView';
+import { ExploreView } from './components/ExploreView';
+import { CameraQrScannerModal } from './components/CameraQrScannerModal';
+import { BiometricLockModal } from './components/BiometricLockModal';
 import { SettingsView } from './components/SettingsView';
 import { TransactionsView } from './components/TransactionsView';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -17,16 +19,45 @@ import { SendReceiveModal } from './components/SendReceiveModal';
 import { Web3ConnectModal } from './components/Web3ConnectModal';
 import { NotificationDrawer } from './components/NotificationDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { LiveTransactionToast } from './components/LiveTransactionToast';
 
 const MainContent: React.FC = () => {
-  const { activeTab, theme, currentUser } = useWallet();
+  const {
+    activeTab,
+    themeMode,
+    currentUser,
+    isCameraScannerOpen,
+    setIsCameraScannerOpen,
+    isBiometricLockOpen,
+    setIsBiometricLockOpen,
+    isBiometricsEnabled,
+  } = useWallet();
+
+  // Prompt biometric unlock on cold start if biometrics enabled
+  React.useEffect(() => {
+    if (isBiometricsEnabled && !sessionStorage.getItem('safepal_unlocked_session')) {
+      setIsBiometricLockOpen(true);
+    }
+  }, [isBiometricsEnabled]);
 
   const isAdminAuthorized =
     currentUser?.email.toLowerCase() === 'legendxadmin1999@gmail.com' &&
     currentUser?.role === 'admin';
 
+  const containerBg =
+    themeMode === 'oled'
+      ? 'bg-black text-slate-100'
+      : themeMode === 'navy'
+      ? 'bg-[#0B1120] text-slate-100'
+      : themeMode === 'light'
+      ? 'bg-[#F8FAFC] text-slate-900'
+      : 'bg-[#0A0A0D] text-slate-100';
+
   return (
-    <div className="min-h-screen bg-[#0A0A0D] text-slate-100 font-sans">
+    <div className={`min-h-screen ${containerBg} font-sans`}>
+      {/* Trust Wallet Style Floating 30-Second Live Transaction Toast */}
+      <LiveTransactionToast />
+
       <Header />
 
       {/* Account Frozen Alert Banner */}
@@ -51,7 +82,7 @@ const MainContent: React.FC = () => {
         {activeTab === 'staking' && <StakingView />}
         {activeTab === 'history' && <TransactionsView />}
         {activeTab === 'nft' && <NftGalleryView />}
-        {activeTab === 'defi' && <DefiView />}
+        {activeTab === 'defi' && <ExploreView />}
         {activeTab === 'settings' && <SettingsView />}
         {activeTab === 'admin' && (isAdminAuthorized ? <AdminDashboard /> : <OverviewDashboard />)}
       </main>
@@ -61,6 +92,22 @@ const MainContent: React.FC = () => {
       <Web3ConnectModal />
       <NotificationDrawer />
       <MobileBottomNav />
+
+      {/* Mobile APK Camera QR Scanner Modal */}
+      <CameraQrScannerModal
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+      />
+
+      {/* Mobile APK Fingerprint Biometric & 6-Digit PIN Lock */}
+      <BiometricLockModal
+        isOpen={isBiometricLockOpen}
+        onUnlockSuccess={() => {
+          sessionStorage.setItem('safepal_unlocked_session', 'true');
+          setIsBiometricLockOpen(false);
+        }}
+        onCancel={() => setIsBiometricLockOpen(false)}
+      />
     </div>
   );
 };

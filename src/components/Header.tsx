@@ -45,6 +45,7 @@ export const Header: React.FC = () => {
     isWeb3ModalOpen,
     setIsWeb3ModalOpen,
     assets,
+    formatFiat,
   } = useWallet();
 
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -97,7 +98,7 @@ export const Header: React.FC = () => {
             {tickerAssets.map((asset) => (
               <div key={asset.id} className="flex items-center gap-2">
                 <span className="font-semibold text-white">{asset.symbol}:</span>
-                <span className="text-slate-300">${asset.priceUsd.toLocaleString()}</span>
+                <span className="text-slate-300">{formatFiat(asset.priceUsd)}</span>
                 <span
                   className={
                     asset.change24h >= 0 ? 'text-[#00D084] font-semibold' : 'text-[#F6465D] font-semibold'
