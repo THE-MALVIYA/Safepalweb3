@@ -21,7 +21,8 @@ for f in old_files:
             print(f"Could not remove {f}: {e}")
 
 # 2. Files to strictly exclude from static hosting ZIP
-excluded_files = {'server.cjs', 'server.cjs.map', 'unzip.php', 'install.php'}
+excluded_files = {'server.cjs', 'server.cjs.map', 'unzip.php', 'install.php', 'dist.zip'}
+
 
 # 3. Create clean compressed dist.zip using standard DEFLATED mode
 with zipfile.ZipFile(zip_filename, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:

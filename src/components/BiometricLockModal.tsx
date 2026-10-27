@@ -10,6 +10,11 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
+import {
+  verifyPlatformFingerprint,
+  isPlatformBiometricsSupported,
+} from '../utils/webauthnBiometrics';
+
 interface BiometricLockModalProps {
   isOpen: boolean;
   onUnlockSuccess: () => void;
@@ -23,6 +28,7 @@ export const BiometricLockModal: React.FC<BiometricLockModalProps> = ({
   onCancel,
   isInitialAppLock = false,
 }) => {
+  const { currentUser } = useWallet();
   const [pin, setPin] = useState<string>('');
   const [isError, setIsError] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -32,7 +38,7 @@ export const BiometricLockModal: React.FC<BiometricLockModalProps> = ({
   // Retrieve saved security PIN (default: '123456')
   const expectedPin = localStorage.getItem('safepal_security_pin') || '123456';
 
-  // Trigger biometric prompt on modal open
+  // Trigger real official biometric prompt on modal open
   useEffect(() => {
     if (isOpen) {
       setPin('');
@@ -44,58 +50,62 @@ export const BiometricLockModal: React.FC<BiometricLockModalProps> = ({
 
   const triggerBiometricPrompt = async () => {
     setIsScanningBiometric(true);
-    setBiometricStatus('Touch sensor for fingerprint verification...');
+    setBiometricStatus('Place finger on device fingerprint sensor...');
 
-    // Attempt real WebAuthn passkey / biometric credential if supported
-    if (window.PublicKeyCredential && typeof navigator.credentials?.get === 'function') {
-      try {
-        const challenge = new Uint8Array(32);
-        window.crypto.getRandomValues(challenge);
-
-        // Quick check without blocking UI indefinitely
-        const timer = setTimeout(() => {
-          setIsScanningBiometric(false);
-        }, 3500);
-
-        const credential = await navigator.credentials.get({
-          publicKey: {
-            challenge,
-            rpId: window.location.hostname,
-            userVerification: 'preferred',
-            timeout: 3000,
-          },
-        }).catch(() => null);
-
-        clearTimeout(timer);
-
-        if (credential) {
-          handleSuccessUnlock();
-          return;
-        }
-      } catch (e) {
-        // Fallback to biometric touch button
-      }
+    const supported = await isPlatformBiometricsSupported();
+    if (!supported) {
+      setIsScanningBiometric(false);
+      setBiometricStatus('Enter 6-digit PIN to unlock');
+      return;
     }
 
-    // Auto-timeout biometric prompt after 2 seconds to allow manual touch
-    setTimeout(() => {
+    try {
+      const res = await verifyPlatformFingerprint({
+        id: currentUser?.id,
+        email: currentUser?.email,
+        name: currentUser?.name,
+      });
+
+      if (res.success) {
+        handleSuccessUnlock();
+      } else {
+        setIsScanningBiometric(false);
+        setBiometricStatus(res.error || 'Tap fingerprint icon or enter 6-digit PIN');
+      }
+    } catch (err: any) {
       setIsScanningBiometric(false);
       setBiometricStatus('Tap fingerprint icon or enter 6-digit PIN');
-    }, 1800);
+    }
   };
 
-  const handleTouchFingerprint = () => {
+  const handleTouchFingerprint = async () => {
+    if (isScanningBiometric) return;
     setIsScanningBiometric(true);
-    setBiometricStatus('Verifying fingerprint identity...');
+    setBiometricStatus('Scanning device fingerprint sensor...');
+
     if (typeof navigator.vibrate === 'function') {
       try {
-        navigator.vibrate(60);
+        navigator.vibrate(50);
       } catch (e) {}
     }
 
-    setTimeout(() => {
-      handleSuccessUnlock();
-    }, 600);
+    try {
+      const res = await verifyPlatformFingerprint({
+        id: currentUser?.id,
+        email: currentUser?.email,
+        name: currentUser?.name,
+      });
+
+      if (res.success) {
+        handleSuccessUnlock();
+      } else {
+        setIsScanningBiometric(false);
+        setBiometricStatus(res.error || 'Fingerprint not recognized. Try again or enter PIN.');
+      }
+    } catch (err: any) {
+      setIsScanningBiometric(false);
+      setBiometricStatus('Fingerprint scan cancelled.');
+    }
   };
 
   const handleSuccessUnlock = () => {

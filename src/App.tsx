@@ -24,6 +24,7 @@ import { LiveTransactionToast } from './components/LiveTransactionToast';
 const MainContent: React.FC = () => {
   const {
     activeTab,
+    setActiveTab,
     themeMode,
     currentUser,
     isCameraScannerOpen,
@@ -33,16 +34,40 @@ const MainContent: React.FC = () => {
     isBiometricsEnabled,
   } = useWallet();
 
+  const isAdminAuthorized =
+    currentUser?.email.toLowerCase() === 'legendxadmin1999@gmail.com' &&
+    currentUser?.role === 'admin';
+
+  // Secret Admin Access via hash (#admin) or Ctrl+Shift+A hotkey
+  React.useEffect(() => {
+    const checkHash = () => {
+      if (window.location.hash.toLowerCase() === '#admin') {
+        setActiveTab('admin');
+      }
+    };
+    checkHash();
+    window.addEventListener('hashchange', checkHash);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        setActiveTab((prev) => (prev === 'admin' ? 'overview' : 'admin'));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('hashchange', checkHash);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [setActiveTab]);
+
   // Prompt biometric unlock on cold start if biometrics enabled
   React.useEffect(() => {
     if (isBiometricsEnabled && !sessionStorage.getItem('safepal_unlocked_session')) {
       setIsBiometricLockOpen(true);
     }
   }, [isBiometricsEnabled]);
-
-  const isAdminAuthorized =
-    currentUser?.email.toLowerCase() === 'legendxadmin1999@gmail.com' &&
-    currentUser?.role === 'admin';
 
   const containerBg =
     themeMode === 'oled'

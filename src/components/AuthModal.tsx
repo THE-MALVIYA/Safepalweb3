@@ -1314,43 +1314,27 @@ export const AuthModal: React.FC = () => {
             </div>
 
             <div className="flex gap-3">
-              {(currentUser?.role === 'admin' || registeredUserRef?.role === 'admin') ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleResetModalState();
-                    setActiveTab('admin');
-                  }}
-                  className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-black text-xs transition-all shadow-xl shadow-amber-500/20 flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  <span>Launch Super Admin Portal</span>
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleResetModalState();
-                      setActiveTab('settings');
-                    }}
-                    className="flex-1 py-3 rounded-2xl bg-[#161B28] border border-[#1E2536] text-xs font-bold text-white hover:bg-[#1E2536] transition-all"
-                  >
-                    Account Settings
-                  </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleResetModalState();
+                  setActiveTab('settings');
+                }}
+                className="flex-1 py-3 rounded-2xl bg-[#161B28] border border-[#1E2536] text-xs font-bold text-white hover:bg-[#1E2536] transition-all"
+              >
+                Account Settings
+              </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleResetModalState();
-                      setActiveTab('overview');
-                    }}
-                    className="flex-1 py-3 rounded-2xl bg-[#3862FB] hover:bg-[#2D54E5] text-xs font-black text-white transition-all shadow-xl shadow-[#3862FB]/30"
-                  >
-                    Go to Wallet Dashboard
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  handleResetModalState();
+                  setActiveTab('overview');
+                }}
+                className="flex-1 py-3 rounded-2xl bg-[#3862FB] hover:bg-[#2D54E5] text-xs font-black text-white transition-all shadow-xl shadow-[#3862FB]/30"
+              >
+                Go to Wallet Dashboard
+              </button>
             </div>
           </div>
         )}

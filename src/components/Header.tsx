@@ -68,10 +68,6 @@ export const Header: React.FC = () => {
     currentUser?.email.toLowerCase() === 'legendxadmin1999@gmail.com' &&
     currentUser?.role === 'admin';
 
-  if (isAdminAuthorized) {
-    navItems.push({ id: 'admin', label: 'Admin Portal', icon: ShieldCheck });
-  }
-
   // Ticker assets
   const tickerAssets = assets.slice(0, 6);
 
@@ -127,20 +123,9 @@ export const Header: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('overview')}
-              className="flex items-center gap-2.5 text-left focus:outline-none group"
+              className="flex items-center gap-2.5 text-left focus:outline-none group cursor-pointer"
               id="brand-logo-button"
             >
-              {/* Authentic SafePal Gradient Shield Logo */}
-              <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#1E40AF] via-[#2A52F3] to-[#38B6FF] p-0.5 shadow-lg shadow-[#2A52F3]/25 transition-transform group-hover:scale-105">
-                <div className="h-full w-full rounded-[10px] bg-[#121418] flex items-center justify-center p-1.5">
-                  <svg className="h-5 w-5" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <polygon points="16,3 28,9.5 28,22.5 16,29 4,22.5 4,9.5" stroke="#3375FD" strokeWidth="2" strokeLinejoin="round" fill="none" />
-                    <polygon points="16,7 24,11.5 24,20.5 16,25 8,20.5 8,11.5" fill="#3375FD" fillOpacity="0.25" stroke="#38B6FF" strokeWidth="1.5" strokeLinejoin="round" />
-                    <path d="M12 14L16 11.5L20 14L16 16.5L12 14Z" fill="white" />
-                    <path d="M12 19L16 16.5L20 19L16 21.5L12 19Z" fill="white" />
-                  </svg>
-                </div>
-              </div>
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-base font-black tracking-tight text-white font-sans">
@@ -194,17 +179,6 @@ export const Header: React.FC = () => {
               <span>{currentUser?.name || 'Wallet'}</span>
               <ChevronDown className="h-3 w-3 text-slate-400" />
             </button>
-
-            {/* Admin Badge if Authorized */}
-            {isAdminAuthorized && (
-              <button
-                onClick={() => setActiveTab('admin')}
-                className="hidden sm:flex items-center gap-1 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1.5 rounded-xl hover:bg-amber-500/30 transition-all"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                <span>Admin</span>
-              </button>
-            )}
 
             {/* Notification Bell */}
             <button

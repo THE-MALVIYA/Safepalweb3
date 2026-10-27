@@ -169,13 +169,21 @@ export const SendReceiveModal: React.FC = () => {
     setDepositResult(res);
 
     if (res.success) {
+      triggerLiveToast({
+        type: 'deposit',
+        amount: depNum,
+        symbol: activeAsset.symbol,
+        network: currentNetworkTag,
+        txHash: customTxHash || undefined,
+      });
+
       setTimeout(() => {
         setShowDepositSheet(false);
         setIsReceiveModalOpen(false);
         setDepositResult(null);
         setDepositAmount('');
         setCustomTxHash('');
-      }, 700);
+      }, 600);
     }
   };
 
@@ -550,8 +558,8 @@ export const SendReceiveModal: React.FC = () => {
 
             </div>
 
-            {/* Bottom Buttons: ↓ Deposit & ⚡ Instant 30s Live Demo */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 bg-[#0C0E14]/95 backdrop-blur-md border-t border-white/[0.04] space-y-2">
+            {/* Bottom Button: Deposit from another wallet */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 bg-[#0C0E14]/95 backdrop-blur-md border-t border-white/[0.04]">
               <button
                 onClick={() => setShowDepositSheet(true)}
                 className="w-full py-3.5 rounded-2xl bg-[#5B67F6] hover:bg-[#4E59E8] text-white font-semibold text-[15px] shadow-lg shadow-[#5B67F6]/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
@@ -559,23 +567,6 @@ export const SendReceiveModal: React.FC = () => {
               >
                 <ArrowDown className="h-4 w-4 stroke-[2.2]" />
                 <span>Deposit from another wallet</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  triggerLiveToast({
-                    type: 'deposit',
-                    amount: 100,
-                    symbol: activeAsset.symbol,
-                    network: currentNetworkTag,
-                  });
-                  setIsReceiveModalOpen(false);
-                }}
-                className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-[12px] font-semibold border border-white/10 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Zap className="h-3.5 w-3.5 text-[#00D084]" />
-                <span>⚡ Test 30s Deposit Popup (+100 {activeAsset.symbol})</span>
               </button>
             </div>
           </div>
@@ -633,32 +624,14 @@ export const SendReceiveModal: React.FC = () => {
 
                   <button
                     type="submit"
-                    className="w-full py-3 rounded-xl bg-[#5B67F6] text-white font-semibold text-xs hover:bg-[#4E59E8] transition-colors cursor-pointer"
+                    className="w-full py-3.5 rounded-2xl bg-[#5B67F6] text-white font-semibold text-sm hover:bg-[#4E59E8] transition-colors cursor-pointer shadow-lg shadow-[#5B67F6]/25"
                   >
                     Confirm & Submit Deposit
                   </button>
 
-                  <div className="pt-1 text-center">
-                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">or instant demo</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerLiveToast({
-                        type: 'deposit',
-                        amount: 100,
-                        symbol: activeAsset.symbol,
-                        network: currentNetworkTag,
-                      });
-                      setShowDepositSheet(false);
-                      setIsReceiveModalOpen(false);
-                    }}
-                    className="w-full py-2.5 rounded-xl bg-[#00D084]/15 hover:bg-[#00D084]/25 text-[#00D084] font-semibold text-xs border border-[#00D084]/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    <span>⚡ Test 30s Live Deposit Popup (+100 {activeAsset.symbol})</span>
-                  </button>
+                  <p className="text-[11px] text-center text-slate-400 pt-1">
+                    Once submitted, your inbound transfer will be tracked through mempool and block confirmations automatically.
+                  </p>
                 </form>
               )}
             </div>

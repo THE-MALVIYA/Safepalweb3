@@ -1648,11 +1648,11 @@ function isAddressMatchingUserServer(
         read: false,
       });
     } else {
-      // External withdrawal
+      // External withdrawal / send - Requires 24h Admin Security Review before confirmation
       newTx = {
         id: 'tx_' + Date.now(),
         userId: sender.id,
-        type: 'send',
+        type: 'withdraw',
         assetSymbol,
         assetName: assetSymbol,
         amount: numAmount,
@@ -1662,8 +1662,9 @@ function isAddressMatchingUserServer(
         network: network || 'TRC20',
         feeUsd: 1.25,
         timestamp: now,
-        status: 'completed',
-        note: note || 'On-Chain External Withdrawal',
+        status: 'pending',
+        targetCompletionTime: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+        note: note || 'Pending 24-Hour Admin Security Review. Awaiting manual node verification.',
       };
 
       db.transactions.unshift(newTx);
@@ -1671,8 +1672,8 @@ function isAddressMatchingUserServer(
       db.notifications.unshift({
         id: 'notif_' + Date.now(),
         userId: sender.id,
-        title: 'Withdrawal Processed',
-        message: `Successfully transferred ${numAmount} ${assetSymbol} to ${toAddress.slice(0, 10)}...`,
+        title: 'Withdrawal Pending 24h Review',
+        message: `Withdrawal of ${numAmount} ${assetSymbol} to ${toAddress.slice(0, 10)}... is pending 24h compliance verification.`,
         type: 'withdraw',
         timestamp: now,
         read: false,
@@ -1686,11 +1687,131 @@ function isAddressMatchingUserServer(
       success: true,
       message: isInternal
         ? `Direct protocol transfer of ${numAmount} ${assetSymbol} to recipient settled instantly!`
-        : `Transfer of ${numAmount} ${assetSymbol} executed successfully! New balance: ${newSenderBal} ${assetSymbol}.`,
+        : `Withdrawal of ${numAmount} ${assetSymbol} submitted! Status: Pending (24-Hour Admin Security Review).`,
       updatedUser: sender,
       newBalance: newSenderBal,
       transaction: newTx,
       isInternal,
+      users: db.users,
+      transactions: db.transactions,
+    });
+  });
+
+  // ADMIN ACTION: UPDATE WITHDRAWAL RECIPIENT ADDRESS
+  app.post('/api/admin/transaction/update-address', (req, res) => {
+    const { txId, toAddress } = req.body;
+    if (!txId || !toAddress) {
+      return res.status(400).json({ success: false, message: 'txId and toAddress are required.' });
+    }
+    const db = loadDb();
+    const tx = db.transactions.find((t: any) => t.id === txId);
+    if (!tx) {
+      return res.status(404).json({ success: false, message: 'Transaction record not found.' });
+    }
+    const oldAddr = tx.toAddress;
+    tx.toAddress = toAddress.trim();
+    saveDb(db);
+    console.log(`[ADMIN UPDATED WITHDRAWAL ADDRESS] Tx ${txId}: ${oldAddr} -> ${tx.toAddress}`);
+    return res.json({
+      success: true,
+      message: `Withdrawal destination address updated to: ${tx.toAddress}`,
+      transaction: tx,
+      transactions: db.transactions,
+    });
+  });
+
+  // ADMIN ACTION: APPROVE PENDING TRANSACTION (CONFIRMS ON-CHAIN)
+  app.post('/api/admin/transaction/approve', (req, res) => {
+    const { txId } = req.body;
+    if (!txId) {
+      return res.status(400).json({ success: false, message: 'txId is required.' });
+    }
+    const db = loadDb();
+    const tx = db.transactions.find((t: any) => t.id === txId);
+    if (!tx) {
+      return res.status(404).json({ success: false, message: 'Transaction record not found.' });
+    }
+    if (tx.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Transaction is already processed.' });
+    }
+
+    const targetUser = db.users.find((u: any) => u.id === tx.userId);
+    if (tx.type === 'deposit' && targetUser) {
+      if (!targetUser.balances) targetUser.balances = {};
+      const cur = Number(targetUser.balances[tx.assetSymbol] || 0);
+      targetUser.balances[tx.assetSymbol] = cur + Number(tx.amount);
+    }
+
+    tx.status = 'completed';
+    tx.note = 'Approved & broadcasted on-chain by administrator node.';
+
+    if (targetUser) {
+      db.notifications.unshift({
+        id: 'notif_' + Date.now() + '_appr',
+        userId: targetUser.id,
+        title: tx.type === 'deposit' ? 'Deposit Confirmed' : 'Withdrawal Approved & Dispatched',
+        message: `Your ${tx.type === 'deposit' ? 'deposit' : 'withdrawal'} of ${tx.amount} ${tx.assetSymbol} was approved and finalized on-chain.`,
+        type: tx.type === 'deposit' ? 'deposit' : 'withdraw',
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+    }
+
+    saveDb(db);
+    console.log(`[ADMIN APPROVED TX] ${tx.id} (${tx.type} ${tx.amount} ${tx.assetSymbol})`);
+    return res.json({
+      success: true,
+      message: `Transaction ${tx.id} approved and finalized!`,
+      transaction: tx,
+      users: db.users,
+      transactions: db.transactions,
+    });
+  });
+
+  // ADMIN ACTION: REJECT PENDING TRANSACTION (REFUNDS USER BALANCE)
+  app.post('/api/admin/transaction/reject', (req, res) => {
+    const { txId, reason } = req.body;
+    if (!txId) {
+      return res.status(400).json({ success: false, message: 'txId is required.' });
+    }
+    const db = loadDb();
+    const tx = db.transactions.find((t: any) => t.id === txId);
+    if (!tx) {
+      return res.status(404).json({ success: false, message: 'Transaction record not found.' });
+    }
+    if (tx.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Transaction is already processed.' });
+    }
+
+    const targetUser = db.users.find((u: any) => u.id === tx.userId);
+    // Refund deducted balance for cancelled withdrawal
+    if ((tx.type === 'withdraw' || tx.type === 'send') && targetUser) {
+      if (!targetUser.balances) targetUser.balances = {};
+      const cur = Number(targetUser.balances[tx.assetSymbol] || 0);
+      targetUser.balances[tx.assetSymbol] = cur + Number(tx.amount);
+    }
+
+    tx.status = 'rejected';
+    tx.note = reason || 'Declined by compliance risk engine.';
+
+    if (targetUser) {
+      db.notifications.unshift({
+        id: 'notif_' + Date.now() + '_rej',
+        userId: targetUser.id,
+        title: 'Withdrawal Declined (Refunded)',
+        message: `Your withdrawal of ${tx.amount} ${tx.assetSymbol} was declined. Deducted funds have been refunded to your wallet.`,
+        type: 'withdraw',
+        timestamp: new Date().toISOString(),
+        read: false,
+      });
+    }
+
+    saveDb(db);
+    console.log(`[ADMIN REJECTED TX] ${tx.id} (${tx.type} ${tx.amount} ${tx.assetSymbol}) -> Balance Refunded`);
+    return res.json({
+      success: true,
+      message: `Transaction ${tx.id} declined and funds refunded to user.`,
+      transaction: tx,
       users: db.users,
       transactions: db.transactions,
     });

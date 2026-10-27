@@ -32,6 +32,9 @@ import {
   Server,
   Zap,
 } from 'lucide-react';
+import {
+  registerPlatformFingerprint,
+} from '../utils/webauthnBiometrics';
 
 interface ContactAddress {
   id: string;
@@ -439,16 +442,6 @@ export const SettingsView: React.FC = () => {
             </div>
           </button>
 
-          {/* Admin Dashboard if authorized */}
-          {isAdminAuthorized && (
-            <button
-              onClick={() => setActiveTab('admin')}
-              className="w-full px-4 py-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors cursor-pointer"
-            >
-              <span className="text-[15px] font-semibold text-[#5B67F6]">Admin Management Portal</span>
-              <ChevronRight className="h-4 w-4 text-[#5B67F6]" />
-            </button>
-          )}
 
           {/* Account Log out or Switch */}
           {currentUser ? (
@@ -621,7 +614,21 @@ export const SettingsView: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={isBiometricsEnabled}
-                    onChange={(e) => setIsBiometricsEnabled(e.target.checked)}
+                    onChange={async (e) => {
+                      const willEnable = e.target.checked;
+                      if (willEnable) {
+                        const reg = await registerPlatformFingerprint({
+                          id: currentUser?.id,
+                          email: currentUser?.email,
+                          name: currentUser?.name,
+                        });
+                        if (reg.success) {
+                          setIsBiometricsEnabled(true);
+                        }
+                      } else {
+                        setIsBiometricsEnabled(false);
+                      }
+                    }}
                     className="h-5 w-5 accent-[#00D084] cursor-pointer"
                   />
                 </div>

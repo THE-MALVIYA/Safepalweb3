@@ -128,19 +128,6 @@ export const MobileBottomNav: React.FC = () => {
           );
         })}
 
-        {/* Admin Portal quick link if admin authorized */}
-        {isAdminAuthorized && (
-          <button
-            onClick={() => setActiveTab('admin')}
-            className={`flex flex-col items-center justify-center py-1 px-2 focus:outline-none transition-colors ${
-              activeTab === 'admin' ? 'text-amber-400' : 'text-[#7C7D86] hover:text-amber-300'
-            }`}
-            title="Admin Portal"
-          >
-            <ShieldCheck className="h-5 w-5 stroke-[2]" />
-            <span className="text-[10px] font-medium mt-1">Admin</span>
-          </button>
-        )}
       </div>
     </nav>
   );
