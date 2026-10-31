@@ -38,16 +38,8 @@ const MainContent: React.FC = () => {
     currentUser?.email.toLowerCase() === 'legendxadmin1999@gmail.com' &&
     currentUser?.role === 'admin';
 
-  // Secret Admin Access via hash (#admin) or Ctrl+Shift+A hotkey
+  // Secret Admin Access strictly via Ctrl+Shift+A hotkey (URL #admin disabled)
   React.useEffect(() => {
-    const checkHash = () => {
-      if (window.location.hash.toLowerCase() === '#admin') {
-        setActiveTab('admin');
-      }
-    };
-    checkHash();
-    window.addEventListener('hashchange', checkHash);
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
         e.preventDefault();
@@ -57,7 +49,6 @@ const MainContent: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.removeEventListener('hashchange', checkHash);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [setActiveTab]);

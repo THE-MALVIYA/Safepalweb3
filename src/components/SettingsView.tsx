@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useWallet } from '../context/WalletContext';
 import { FiatCurrency, ThemeMode } from '../types';
 import {
@@ -90,6 +90,24 @@ export const SettingsView: React.FC = () => {
   const [editingPin, setEditingPin] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinFeedback, setPinFeedback] = useState<string | null>(null);
+
+  // Secret Mobile Admin Access: 5 quick taps on version footer
+  const [versionTapCount, setVersionTapCount] = useState(0);
+  const versionTapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleVersionTap = () => {
+    if (versionTapTimeoutRef.current) clearTimeout(versionTapTimeoutRef.current);
+    const next = versionTapCount + 1;
+    if (next >= 5) {
+      setVersionTapCount(0);
+      setActiveTab('admin');
+    } else {
+      setVersionTapCount(next);
+      versionTapTimeoutRef.current = setTimeout(() => {
+        setVersionTapCount(0);
+      }, 1500);
+    }
+  };
 
   // Settings preferences
   const [txCost, setTxCost] = useState<'Low' | 'Middle' | 'High'>('Middle');
@@ -463,8 +481,11 @@ export const SettingsView: React.FC = () => {
           )}
         </div>
 
-        {/* Version info footer */}
-        <div className="text-center pt-2 pb-6 text-xs text-[#5A5D6B] font-mono">
+        {/* Version info footer (Secret 5-Tap Gateway for Mobile Phones) */}
+        <div
+          onClick={handleVersionTap}
+          className="text-center pt-2 pb-6 text-xs text-[#5A5D6B] font-mono cursor-default select-none active:opacity-75"
+        >
           SafePal Wallet App v4.8.2 • Multi-Chain Security Keyring
         </div>
       </div>
