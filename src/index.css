@@ -78,11 +78,44 @@
   }
 }
 
+/* Ultra HD 4K Crystal Clear Engine */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  background-color: #0A0A0D;
+  -webkit-tap-highlight-color: transparent;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+}
+
 body {
-  background-color: #0B0E14;
+  background-color: #0A0A0D;
   color: #FFFFFF;
-  font-family: 'Inter', 'Manrope', system-ui, -apple-system, sans-serif;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   overflow-x: hidden;
+  letter-spacing: -0.01em;
+}
+
+/* 4K Vector and High-DPI Sharpness */
+svg {
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
+}
+
+img {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: high-quality;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Monospace numerals alignment */
+.font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes marquee {
@@ -99,4 +132,5 @@ body {
 .animate-marquee:hover {
   animation-play-state: paused;
 }
+
 

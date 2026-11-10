@@ -71,8 +71,8 @@ export const Header: React.FC = () => {
   // Ticker assets
   const tickerAssets = assets.slice(0, 6);
 
-  // If on overview tab, OverviewDashboard renders the exact cloned SafePal header
-  if (activeTab === 'overview') {
+  // If on overview or landing tab, don't render standard header
+  if (activeTab === 'overview' || activeTab === 'landing') {
     return null;
   }
 

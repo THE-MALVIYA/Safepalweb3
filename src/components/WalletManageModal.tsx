@@ -1,24 +1,22 @@
 import React, { useState } from 'react';
 import { useWallet } from '../context/WalletContext';
 import {
-  Shield,
-  ShieldCheck,
-  Plus,
-  Key,
-  Copy,
-  Check,
   X,
-  Lock,
-  LogOut,
-  Wallet,
-  CheckCircle2,
-  AlertCircle,
+  Plus,
+  ArrowRight,
+  Link2,
   Eye,
-  EyeOff,
-  User,
-  Sparkles,
+  Smartphone,
+  Search,
+  Check,
+  MoreVertical,
+  ChevronLeft,
+  Edit3,
+  Copy,
+  Key,
+  Shield,
+  Trash2,
 } from 'lucide-react';
-import { generateSeedPhrase } from '../context/WalletContext';
 
 interface WalletManageModalProps {
   isOpen: boolean;
@@ -30,350 +28,409 @@ export const WalletManageModal: React.FC<WalletManageModalProps> = ({ isOpen, on
     currentUser,
     setCurrentUser,
     deviceWallets,
-    removeDeviceWallet,
-    setIsAuthModalOpen,
+    setActiveTab,
     restoreWalletWithSeed,
     logoutUser,
-    addNotification,
   } = useWallet();
 
-  const [activeTab, setActiveTab] = useState<'wallets' | 'import' | 'backup'>('wallets');
-  const [importSeedInput, setImportSeedInput] = useState('');
-  const [importNameInput, setImportNameInput] = useState('Imported Wallet');
-  const [generatedSeed, setGeneratedSeed] = useState<string>('');
-  const [copiedSeed, setCopiedSeed] = useState(false);
-  const [showSeedSecret, setShowSeedSecret] = useState(false);
-  const [feedbackMsg, setFeedbackMsg] = useState<{ success: boolean; text: string } | null>(null);
+  // Navigation mode: 'my_wallets' (Image 2) | 'add_wallet' (Image 3) | 'import_phrase' | 'backup_phrase'
+  const [view, setView] = useState<'my_wallets' | 'add_wallet' | 'import_phrase' | 'backup_phrase'>('my_wallets');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [copiedPhrase, setCopiedPhrase] = useState(false);
+
+  // Import form state
+  const [seedInput, setSeedInput] = useState('');
+  const [newWalletName, setNewWalletName] = useState('Wallet02');
+  const [importError, setImportError] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
 
   if (!isOpen) return null;
 
-  // Filter out super admin and strictly show only this user's device wallets
   const rawList = (deviceWallets && deviceWallets.length > 0)
     ? deviceWallets
     : (currentUser ? [currentUser] : []);
 
-  const displayWallets = rawList.filter((u) => u.email?.toLowerCase() !== 'legendxadmin1999@gmail.com');
+  const displayWallets = rawList
+    .filter((u) => u.email?.toLowerCase() !== 'legendxadmin1999@gmail.com')
+    .filter((u) => u.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const handleExecuteImport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!importSeedInput.trim()) {
-      setFeedbackMsg({ success: false, text: 'Please enter a valid 12-word seed phrase or private key' });
-      return;
-    }
-
-    const res = await restoreWalletWithSeed(importSeedInput.trim(), importNameInput);
-    if (res.success && res.user) {
-      setCurrentUser(res.user);
-      setFeedbackMsg({ success: true, text: 'Wallet imported successfully!' });
-      setTimeout(() => {
-        setFeedbackMsg(null);
-        onClose();
-      }, 1200);
-    } else {
-      setFeedbackMsg({ success: false, text: res.message || 'Invalid recovery phrase.' });
-    }
+  const handlePasteToSearch = async () => {
+    try {
+      if (navigator.clipboard) {
+        const text = await navigator.clipboard.readText();
+        setSearchQuery(text.trim());
+      }
+    } catch (_) {}
   };
 
-  const handleSwitchUser = (u: any) => {
-    setCurrentUser(u);
+  const handleSelectWallet = (wallet: any) => {
+    setCurrentUser(wallet);
     try {
-      localStorage.setItem('safepal_curr_user_v2', JSON.stringify(u));
-      localStorage.setItem('trustpro_curr_user_v2', JSON.stringify(u));
-    } catch (e) {
-      console.warn(e);
-    }
-    addNotification(u.id, 'Wallet Switched', `Active wallet changed to ${u.name}`, 'info');
+      localStorage.setItem('safepal_curr_user_v2', JSON.stringify(wallet));
+    } catch (_) {}
     onClose();
   };
 
-  const handleLogout = () => {
-    logoutUser();
-    setFeedbackMsg({ success: true, text: 'Logged out of current wallet session.' });
-    setTimeout(() => {
-      setFeedbackMsg(null);
-      onClose();
-    }, 1000);
+  const handleExecuteImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!seedInput.trim()) {
+      setImportError('Please enter a valid 12 or 24-word mnemonic phrase');
+      return;
+    }
+    setIsImporting(true);
+    setImportError('');
+    try {
+      const res = await restoreWalletWithSeed(seedInput.trim(), newWalletName.trim() || 'Software Wallet');
+      if (res.success && res.user) {
+        setCurrentUser(res.user);
+        setView('my_wallets');
+        setSeedInput('');
+        onClose();
+      } else {
+        setImportError(res.message || 'Invalid recovery phrase. Please check spelling.');
+      }
+    } catch (err: any) {
+      setImportError(err.message || 'Failed to import wallet.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleCopySeed = () => {
+    if (currentUser?.seedPhrase && navigator?.clipboard) {
+      navigator.clipboard.writeText(currentUser.seedPhrase);
+      setCopiedPhrase(true);
+      setTimeout(() => setCopiedPhrase(false), 2000);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4 animate-fadeIn">
-      <div className="w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-[#121418] border border-white/10 p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-[#3862FB]/10 border border-[#3862FB]/30 flex items-center justify-center text-[#3862FB]">
-              <Shield className="h-5 w-5 fill-[#3862FB]" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-white">Wallets & Accounts</h2>
-              <p className="text-xs text-slate-400">SafePal Multi-Chain Keyring</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Feedback Alert */}
-        {feedbackMsg && (
-          <div
-            className={`mb-4 flex items-center gap-2 rounded-xl p-3 text-xs font-medium ${
-              feedbackMsg.success
-                ? 'bg-[#3862FB]/15 border border-[#3862FB]/30 text-[#3862FB]'
-                : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
-            }`}
-          >
-            {feedbackMsg.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
-            <span>{feedbackMsg.text}</span>
-          </div>
-        )}
-
-        {/* Tab 1: Current Active Wallet */}
-        {activeTab === 'wallets' && (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4 select-none font-sans animate-fadeIn">
+      <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl bg-[#14151C] border border-white/10 p-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        {/* ========================================================== */}
+        {/* VIEW 1: MY WALLETS (Exact match to Image 2) */}
+        {/* ========================================================== */}
+        {view === 'my_wallets' && (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
-                <span>Active Keyring Wallet</span>
-                {currentUser && (
-                  <span className="text-[11px] text-[#00D084] font-medium flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#00D084]" />
-                    Online & Synced
-                  </span>
-                )}
-              </div>
-
-              {currentUser ? (
-                <div className="p-4 rounded-2xl bg-[#1E2024] border border-[#3862FB]/40 shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-11 w-11 rounded-2xl flex items-center justify-center bg-[#3862FB]/15 text-[#3862FB] border border-[#3862FB]/30">
-                        <Wallet className="h-6 w-6 stroke-[2.2]" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-white flex items-center gap-2">
-                          <span>{currentUser.name}</span>
-                          <span className="text-[10px] bg-[#3862FB]/20 text-[#3862FB] px-2 py-0.5 rounded-full font-semibold">
-                            Primary
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-400 font-mono mt-0.5">
-                          {currentUser.email && currentUser.email.includes('@') && !currentUser.email.includes('phone.safepal.io')
-                            ? currentUser.email
-                            : (currentUser.phone || 'Non-Custodial Multi-Chain Wallet')}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 bg-[#00D084]/15 text-[#00D084] text-[11px] font-semibold px-2.5 py-1 rounded-full border border-[#00D084]/30">
-                      <Check className="h-3.5 w-3.5" />
-                      <span>Active</span>
-                    </div>
-                  </div>
-
-                  {currentUser.seedPhrase && (
-                    <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs">
-                      <span className="text-slate-400">Recovery Phrase:</span>
-                      <button
-                        onClick={() => setActiveTab('backup')}
-                        className="text-[#3862FB] hover:text-[#5B67F6] font-semibold flex items-center gap-1"
-                      >
-                        <Key className="h-3.5 w-3.5" />
-                        <span>View / Backup Phrase</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="p-6 rounded-2xl bg-[#16181D] border border-white/5 text-center space-y-3">
-                  <Wallet className="h-10 w-10 text-slate-500 mx-auto" />
-                  <p className="text-xs text-slate-400">No active wallet connected. Sign in or import a wallet to start trading.</p>
-                  <button
-                    onClick={() => {
-                      onClose();
-                      setIsAuthModalOpen(true);
-                    }}
-                    className="px-5 py-2.5 rounded-xl bg-[#3862FB] text-white text-xs font-bold hover:bg-[#2D54E5]"
-                  >
-                    Connect / Create Wallet
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Actions Grid */}
-            <div className="pt-2">
+            {/* Header: Edit (pencil) | My Wallets | Close (x) */}
+            <div className="flex items-center justify-between pb-2">
               <button
-                onClick={() => setActiveTab('import')}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#3862FB] hover:bg-[#2D54E5] text-white font-bold text-xs transition-all shadow-md shadow-[#3862FB]/20 active:scale-95"
+                className="text-white hover:text-slate-300 transition-colors p-1"
+                title="Edit Wallets"
               >
-                <Key className="h-4 w-4 stroke-[2.5]" />
-                <span>Import Wallet with Recovery Phrase / Key</span>
+                <Edit3 className="h-5 w-5 stroke-[2]" />
+              </button>
+
+              <h2 className="text-[18px] font-bold text-white tracking-tight">
+                My Wallets
+              </h2>
+
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-full bg-[#2B2D38] hover:bg-[#383A48] text-white flex items-center justify-center transition-colors"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Auth Actions: Sign In / Register / Log Out */}
-            <div className="pt-3 border-t border-white/10 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    onClose();
-                    setIsAuthModalOpen(true);
-                  }}
-                  className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/60 text-xs font-semibold text-white transition-all"
-                >
-                  <User className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Sign In / Login</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onClose();
-                    setIsAuthModalOpen(true);
-                  }}
-                  className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/60 text-xs font-semibold text-blue-400 transition-all"
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Register Account</span>
-                </button>
+            {/* Search bar matching Image 2 */}
+            <div className="bg-[#1C1E26] rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2 border border-white/5">
+              <div className="flex items-center gap-2 flex-1">
+                <Search className="h-4 w-4 text-[#60616C] shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search name or address"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-transparent text-[13.5px] text-white placeholder-[#60616C] focus:outline-none w-full"
+                />
               </div>
-
-              {currentUser ? (
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs font-bold text-rose-400 transition-all"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  <span>Log Out of Wallet ({currentUser.name})</span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    onClose();
-                    setIsAuthModalOpen(true);
-                  }}
-                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-[#3862FB]/15 hover:bg-[#3862FB]/25 border border-[#3862FB]/30 text-xs font-bold text-[#3862FB] transition-all"
-                >
-                  <User className="h-3.5 w-3.5" />
-                  <span>Sign In with Gmail / Password</span>
-                </button>
-              )}
-            </div>
-
-            {/* Quick Backup Option */}
-            <div className="pt-2 border-t border-white/10">
-              <button
-                onClick={() => {
-                  setGeneratedSeed(currentUser?.seedPhrase || 'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima');
-                  setActiveTab('backup');
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl bg-[#16181D] hover:bg-[#1E2024] border border-white/5 text-xs text-slate-300 transition-colors"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Lock className="h-4 w-4 text-amber-400" />
-                  <span>Backup Secret Recovery Phrase</span>
-                </div>
-                <span className="text-[#3862FB] font-semibold text-[11px]">View &rarr;</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: Import Wallet */}
-        {activeTab === 'import' && (
-          <form onSubmit={handleExecuteImport} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Wallet Label</label>
-              <input
-                type="text"
-                value={importNameInput}
-                onChange={(e) => setImportNameInput(e.target.value)}
-                className="w-full rounded-xl bg-[#16181D] border border-white/10 px-3.5 py-2.5 text-sm text-white focus:border-[#3862FB] focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Secret Phrase or Private Key
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Enter 12 or 24 words separated by spaces..."
-                value={importSeedInput}
-                onChange={(e) => setImportSeedInput(e.target.value)}
-                className="w-full rounded-xl bg-[#16181D] border border-white/10 p-3 text-xs font-mono text-white placeholder-slate-500 focus:border-[#3862FB] focus:outline-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setActiveTab('wallets')}
-                className="flex-1 py-3 rounded-xl bg-[#1E2024] hover:bg-[#25282E] text-white text-xs font-bold transition-all"
+                onClick={handlePasteToSearch}
+                className="text-[#00D084] hover:text-[#00B875] text-[13px] font-semibold transition-colors shrink-0"
               >
-                Back
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-3 rounded-xl bg-[#3862FB] hover:bg-[#2D54E5] text-white text-xs font-bold transition-all shadow-md shadow-[#3862FB]/20"
-              >
-                Restore Wallet
+                Paste
               </button>
             </div>
-          </form>
+
+            {/* Section Title: Software Wallet */}
+            <div className="pt-2">
+              <h3 className="text-[14px] font-semibold text-white tracking-tight mb-3">
+                Software Wallet
+              </h3>
+
+              {/* Wallet Cards List matching Image 2 */}
+              <div className="space-y-2.5">
+                {displayWallets.map((wallet) => {
+                  const isActive = currentUser?.id === wallet.id;
+                  let walletTotalUsd = 0;
+                  if (wallet.balances) {
+                    Object.keys(wallet.balances).forEach((sym) => {
+                      const amount = wallet.balances[sym] || 0;
+                      // estimate USD
+                      walletTotalUsd += amount * (sym === 'BTC' ? 88000 : sym === 'ETH' ? 3200 : 1);
+                    });
+                  }
+
+                  return (
+                    <div
+                      key={wallet.id}
+                      onClick={() => handleSelectWallet(wallet)}
+                      className={`p-3.5 rounded-2xl flex items-center justify-between border cursor-pointer transition-all active:scale-[0.99] ${
+                        isActive
+                          ? 'bg-[#1C1E26] border-white/10'
+                          : 'bg-[#181920] border-transparent hover:border-white/5'
+                      }`}
+                    >
+                      {/* Left: Phone inside circle + Wallet Info */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-[#2B2E3D] flex items-center justify-center shrink-0 text-[#8E92A4]">
+                          <Smartphone className="h-5 w-5 stroke-[1.8]" />
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-[15px] font-bold text-white truncate">
+                            {wallet.name || 'Wallet01-FCH'}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-[#8E92A4] bg-[#2B2E3D] px-1.5 py-0.5 rounded border border-white/5 font-mono">
+                              Mnemonic
+                            </span>
+                            <span className="text-[12px] text-[#8E92A4] font-mono">
+                              ≈ ${walletTotalUsd > 0 ? walletTotalUsd.toFixed(2) : '0'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Active Checkmark + 3 Dots with red badge */}
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        {isActive && (
+                          <div className="w-6 h-6 rounded-full bg-[#00D084] flex items-center justify-center text-[#07070B] shadow-sm">
+                            <Check className="h-3.5 w-3.5 stroke-[3]" />
+                          </div>
+                        )}
+
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (wallet.seedPhrase) {
+                                setView('backup_phrase');
+                              }
+                            }}
+                            className="p-1 text-[#8E92A4] hover:text-white transition-colors"
+                            title="Wallet Options"
+                          >
+                            <MoreVertical className="h-5 w-5 stroke-[1.8]" />
+                          </button>
+                          {/* Red notification dot matching Image 2 */}
+                          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#FF3B30]" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bottom Button: + Add Wallet (Purple matching Image 2) */}
+            <div className="pt-4">
+              <button
+                onClick={() => setView('add_wallet')}
+                className="w-full py-4 rounded-2xl bg-[#5B4DF6] hover:bg-[#4E3FE7] text-white font-semibold text-[16px] flex items-center justify-center gap-2 shadow-lg shadow-[#5B4DF6]/25 active:scale-[0.99] transition-transform cursor-pointer"
+              >
+                <Plus className="h-5 w-5 stroke-[2.5]" />
+                <span>Add Wallet</span>
+              </button>
+            </div>
+          </div>
         )}
 
-        {/* Tab 4: Backup Secret */}
-        {activeTab === 'backup' && (
+        {/* ========================================================== */}
+        {/* VIEW 2: ADD WALLET OPTIONS (Exact match to Image 3) */}
+        {/* ========================================================== */}
+        {view === 'add_wallet' && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-3.5 text-amber-300 text-xs flex items-start gap-2.5">
-              <Lock className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
-              <span>
-                Do not share your seed phrase. Anyone with these 12 words can access and spend all funds in your wallet.
-              </span>
+            {/* Header: < Add Wallet */}
+            <div className="flex items-center gap-2 pb-2">
+              <button
+                onClick={() => setView('my_wallets')}
+                className="text-white hover:text-slate-300 transition-colors p-1"
+              >
+                <ChevronLeft className="h-6 w-6 stroke-[2.2]" />
+              </button>
+              <h2 className="text-[20px] font-bold text-white tracking-tight">
+                Add Wallet
+              </h2>
             </div>
 
-            <div className="rounded-2xl bg-[#16181D] border border-white/10 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold text-slate-300">Recovery Phrase for {currentUser?.name}</span>
-                <button
-                  onClick={() => setShowSeedSecret(!showSeedSecret)}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-white"
-                >
-                  {showSeedSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  <span>{showSeedSecret ? 'Hide' : 'Reveal'}</span>
-                </button>
+            {/* 4 Cards matching Image 3 */}
+            <div className="space-y-3 pt-2">
+              {/* Card 1: Create New Wallet */}
+              <button
+                onClick={() => {
+                  onClose();
+                  setActiveTab('landing');
+                }}
+                className="w-full p-4 rounded-2xl bg-[#1C1E26] hover:bg-[#252834] text-left flex items-center gap-3.5 border border-white/5 active:scale-[0.99] transition-transform cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#5B4DF6]/20 text-[#5B4DF6] flex items-center justify-center shrink-0">
+                  <Plus className="h-5 w-5 stroke-[2.5]" />
+                </div>
+                <span className="text-[16px] font-semibold text-white">
+                  Create New Wallet
+                </span>
+              </button>
+
+              {/* Card 2: Add Existing Wallet */}
+              <button
+                onClick={() => setView('import_phrase')}
+                className="w-full p-4 rounded-2xl bg-[#1C1E26] hover:bg-[#252834] text-left flex items-center gap-3.5 border border-white/5 active:scale-[0.99] transition-transform cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                  <ArrowRight className="h-5 w-5 stroke-[2.5]" />
+                </div>
+                <span className="text-[16px] font-semibold text-white">
+                  Add Existing Wallet
+                </span>
+              </button>
+
+              {/* Card 3: Connect Hardware Wallet */}
+              <button
+                onClick={() => {
+                  onClose();
+                  setActiveTab('landing');
+                }}
+                className="w-full p-4 rounded-2xl bg-[#1C1E26] hover:bg-[#252834] text-left flex items-center gap-3.5 border border-white/5 active:scale-[0.99] transition-transform cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                  <Link2 className="h-5 w-5 stroke-[2.5]" />
+                </div>
+                <span className="text-[16px] font-semibold text-white">
+                  Connect Hardware Wallet
+                </span>
+              </button>
+
+              {/* Card 4: Observation Wallet */}
+              <button
+                onClick={() => setView('import_phrase')}
+                className="w-full p-4 rounded-2xl bg-[#1C1E26] hover:bg-[#252834] text-left flex items-center gap-3.5 border border-white/5 active:scale-[0.99] transition-transform cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Eye className="h-5 w-5 stroke-[2.2]" />
+                </div>
+                <span className="text-[16px] font-semibold text-white">
+                  Observation Wallet
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================== */}
+        {/* VIEW 3: IMPORT SEED PHRASE */}
+        {/* ========================================================== */}
+        {view === 'import_phrase' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2">
+              <button
+                onClick={() => setView('add_wallet')}
+                className="text-white hover:text-slate-300 transition-colors p-1"
+              >
+                <ChevronLeft className="h-6 w-6 stroke-[2.2]" />
+              </button>
+              <h2 className="text-[20px] font-bold text-white tracking-tight">
+                Import Existing Wallet
+              </h2>
+            </div>
+
+            <form onSubmit={handleExecuteImport} className="space-y-3.5">
+              <div>
+                <label className="text-xs font-semibold text-[#8E92A4] uppercase tracking-wider block mb-2">
+                  Recovery Phrase (12 or 24 words)
+                </label>
+                <textarea
+                  rows={4}
+                  value={seedInput}
+                  onChange={(e) => setSeedInput(e.target.value)}
+                  placeholder="Enter mnemonic words separated by space..."
+                  className="w-full rounded-2xl bg-[#1C1E26] border border-white/10 p-3.5 text-white text-[14px] font-mono placeholder-[#60616C] focus:outline-none focus:border-[#5B4DF6] resize-none"
+                />
               </div>
 
-              {showSeedSecret ? (
-                <div className="grid grid-cols-3 gap-2">
-                  {generatedSeed.split(' ').map((word, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-1.5 rounded-lg bg-[#1E2024] px-2.5 py-1.5 text-xs font-mono text-white border border-white/5"
-                    >
-                      <span className="text-slate-500 text-[10px] w-4">{idx + 1}.</span>
-                      <span className="font-semibold text-blue-400">{word}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div
-                  onClick={() => setShowSeedSecret(true)}
-                  className="h-24 rounded-xl bg-[#1E2024] border border-dashed border-white/20 flex flex-col items-center justify-center text-xs text-slate-400 cursor-pointer hover:border-[#3862FB] transition-colors"
-                >
-                  <Eye className="h-5 w-5 mb-1 text-slate-300" />
-                  <span>Tap to reveal Secret Phrase</span>
-                </div>
+              <div>
+                <label className="text-xs font-semibold text-[#8E92A4] uppercase tracking-wider block mb-2">
+                  Wallet Name
+                </label>
+                <input
+                  type="text"
+                  value={newWalletName}
+                  onChange={(e) => setNewWalletName(e.target.value)}
+                  placeholder="Wallet Name"
+                  className="w-full rounded-2xl bg-[#1C1E26] border border-white/10 px-4 py-3 text-white text-[14px] placeholder-[#60616C] focus:outline-none focus:border-[#5B4DF6]"
+                />
+              </div>
+
+              {importError && (
+                <p className="text-[#FF5252] text-xs font-medium">{importError}</p>
               )}
+
+              <button
+                type="submit"
+                disabled={isImporting}
+                className="w-full py-4 rounded-2xl bg-[#5B4DF6] hover:bg-[#4E3FE7] disabled:opacity-50 text-white font-semibold text-[15px] shadow-lg shadow-[#5B4DF6]/25 active:scale-[0.99] transition-transform cursor-pointer mt-2"
+              >
+                {isImporting ? 'Importing Wallet...' : 'Confirm & Import'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ========================================================== */}
+        {/* VIEW 4: BACKUP RECOVERY PHRASE */}
+        {/* ========================================================== */}
+        {view === 'backup_phrase' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2">
+              <button
+                onClick={() => setView('my_wallets')}
+                className="text-white hover:text-slate-300 transition-colors p-1"
+              >
+                <ChevronLeft className="h-6 w-6 stroke-[2.2]" />
+              </button>
+              <h2 className="text-[20px] font-bold text-white tracking-tight">
+                Mnemonic Backup
+              </h2>
+            </div>
+
+            <p className="text-xs text-[#8E92A4] leading-relaxed">
+              Below is the secret recovery phrase for <strong className="text-white">{currentUser?.name}</strong>. Never disclose it to anyone.
+            </p>
+
+            <div className="p-4 rounded-2xl bg-[#1C1E26] border border-white/10">
+              <p className="text-sm font-mono text-white leading-relaxed select-all">
+                {currentUser?.seedPhrase || 'No recovery phrase saved for this session.'}
+              </p>
             </div>
 
             <button
-              onClick={() => setActiveTab('wallets')}
-              className="w-full py-3 rounded-xl bg-[#1E2024] hover:bg-[#25282E] text-white text-xs font-bold transition-all"
+              onClick={handleCopySeed}
+              className="w-full py-3.5 rounded-xl bg-[#222432] hover:bg-[#2D3042] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
-              Done
+              {copiedPhrase ? (
+                <>
+                  <Check className="h-4 w-4 text-[#00D084]" />
+                  <span className="text-[#00D084]">Copied to Clipboard</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copy Recovery Phrase</span>
+                </>
+              )}
             </button>
           </div>
         )}

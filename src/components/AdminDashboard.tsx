@@ -3,6 +3,13 @@ import { useWallet, getUserReceiveAddress } from '../context/WalletContext';
 import { UserAccount, CryptoAsset } from '../types';
 import { CryptoIcon } from './CryptoIcon';
 import {
+  apiUrl,
+  isMobileApkEnvironment,
+  getApiBaseUrl,
+  getCustomBackendUrl,
+  setCustomBackendUrl,
+} from '../utils/apiUrl';
+import {
   ShieldCheck,
   Users,
   PlusCircle,
@@ -219,12 +226,17 @@ export const AdminDashboard: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [apiSyncStatus, setApiSyncStatus] = useState<'connected' | 'error' | 'syncing'>('syncing');
   const [apiSyncError, setApiSyncError] = useState<string | null>(null);
+  const [backendServerUrl, setBackendServerUrl] = useState(
+    getCustomBackendUrl() || (isMobileApkEnvironment() ? 'https://safepalweb3.sbs' : '')
+  );
+  const [backendSaveMsg, setBackendSaveMsg] = useState<string | null>(null);
 
   const refreshAdminUsers = async () => {
     if (!isAdminAuthorized) return;
     setIsRefreshing(true);
     try {
-      const res = await fetch('/api/admin/all-users?adminEmail=legendxadmin1999%40gmail.com&adminPass=Joshi%2412legend', {
+      const targetUrl = apiUrl('/api/admin/all-users?adminEmail=legendxadmin1999%40gmail.com&adminPass=Joshi%2412legend');
+      const res = await fetch(targetUrl, {
         headers: {
           'x-admin-email': 'legendxadmin1999@gmail.com',
           'x-admin-auth': 'Joshi$12legend',
@@ -235,7 +247,9 @@ export const AdminDashboard: React.FC = () => {
       if (contentType.includes('text/html')) {
         setApiSyncStatus('error');
         setApiSyncError(
-          'VPS Nginx Notice: /api/ is returning HTML (index.html) instead of Node.js API. Please update your Nginx configuration proxy_pass to port 3000.'
+          isMobileApkEnvironment()
+            ? `Mobile APK Backend Notice: API endpoint (${targetUrl}) returned index.html instead of JSON. Ensure your VPS Nginx proxies /api/ to Node.js on port 3000, or verify the backend server URL below.`
+            : 'VPS Nginx Notice: /api/ is returning HTML (index.html) instead of Node.js API. Please update your Nginx configuration proxy_pass to port 3000.'
         );
         setIsRefreshing(false);
         return;
@@ -532,24 +546,59 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* REVERSE PROXY DIAGNOSTIC BANNER IF HTML IS RETURNED BY NGINX */}
+      {/* REVERSE PROXY DIAGNOSTIC BANNER IF HTML IS RETURNED BY NGINX OR IN APK */}
       {apiSyncError && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-fadeIn">
-          <div className="flex items-start gap-2.5">
-            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-white">VPS Nginx Reverse Proxy Configuration Required</p>
-              <p className="text-amber-200/80 mt-0.5">
-                Nginx on your VPS is returning <code className="bg-black/40 px-1 py-0.5 rounded font-mono text-amber-300">index.html</code> instead of routing <code className="bg-black/40 px-1 py-0.5 rounded font-mono text-amber-300">/api/*</code> to Node.js on port 3000. Apply the Nginx location proxy block on your VPS to enable live database persistence.
-              </p>
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-col gap-3 animate-fadeIn">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-white">
+                  {isMobileApkEnvironment() ? '📱 Mobile APK Backend Connection Required' : 'VPS Nginx Reverse Proxy Configuration Required'}
+                </p>
+                <p className="text-amber-200/80 mt-0.5">
+                  {apiSyncError}
+                </p>
+              </div>
             </div>
+            <button
+              onClick={refreshAdminUsers}
+              disabled={isRefreshing}
+              className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shrink-0 hover:bg-amber-400 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>Re-test API</span>
+            </button>
           </div>
-          <button
-            onClick={refreshAdminUsers}
-            className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shrink-0 hover:bg-amber-400 transition-all"
-          >
-            Re-test API
-          </button>
+
+          {/* Mobile APK / VPS Backend URL Setting Bar */}
+          <div className="pt-2 border-t border-amber-500/20 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="text-[11px] text-slate-300 font-semibold shrink-0">
+              Live Backend API URL:
+            </div>
+            <input
+              type="text"
+              value={backendServerUrl}
+              onChange={(e) => setBackendServerUrl(e.target.value)}
+              placeholder="https://safepalweb3.sbs or http://YOUR_VPS_IP:3000"
+              className="flex-1 bg-black/50 border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setCustomBackendUrl(backendServerUrl);
+                setBackendSaveMsg('Backend URL saved!');
+                setTimeout(() => setBackendSaveMsg(null), 3000);
+                setTimeout(refreshAdminUsers, 300);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs shrink-0 transition-all cursor-pointer"
+            >
+              Save & Connect
+            </button>
+          </div>
+          {backendSaveMsg && (
+            <p className="text-[11px] text-emerald-400 font-bold">{backendSaveMsg}</p>
+          )}
         </div>
       )}
 

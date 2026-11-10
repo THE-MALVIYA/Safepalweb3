@@ -16,6 +16,7 @@ import {
   LiveTxType,
   LiveTxStage,
 } from '../types';
+import { apiUrl } from '../utils/apiUrl';
 import {
   INITIAL_ASSETS,
   INITIAL_USERS,
@@ -294,7 +295,8 @@ interface WalletContextType {
 
   // Asset/Market Actions
   toggleWatchlist: (symbol: string) => void;
-  refreshPrices: () => Promise<void>;
+  refreshPrices: (isExplicit?: boolean) => Promise<void>;
+  syncWithServer: () => Promise<void>;
   isPriceLoading: boolean;
 
   // User Wallet Actions
@@ -1007,7 +1009,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         queryParams.set('adminPass', 'Joshi$12legend');
       }
 
-      const syncUrl = `/api/sync${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const syncUrl = apiUrl(`/api/sync${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
       const res = await fetch(syncUrl, { headers });
       if (res.ok) {
         const data = await res.json();
@@ -1144,7 +1146,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       headers['x-admin-auth'] = 'Joshi$12legend';
     }
 
-    fetch('/api/sync', {
+    fetch(apiUrl('/api/sync'), {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -1173,7 +1175,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } catch (e) {}
 
       saveToServer({ user: updated });
-      fetch('/api/users/update', {
+      fetch(apiUrl('/api/users/update'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user: updated }),
@@ -1206,7 +1208,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     localStorage.setItem('trustpro_users_v2', JSON.stringify(updatedUsers));
     saveToServer({ users: updatedUsers });
 
-    fetch('/api/users/update', {
+    fetch(apiUrl('/api/users/update'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user: updatedUser, users: updatedUsers }),
@@ -1479,10 +1481,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // Poll or Fetch Live Prices from Backend Proxy (Binance + CoinGecko real-time feed)
-  const refreshPrices = async () => {
-    setIsPriceLoading(true);
+  const refreshPrices = async (isExplicit = false) => {
+    if (isExplicit) {
+      setIsPriceLoading(true);
+    }
     try {
-      const res = await fetch('/api/crypto/live');
+      const res = await fetch(apiUrl('/api/crypto/live'));
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
         setAssets((prevAssets) =>
@@ -1560,16 +1564,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (err) {
       console.warn('Live price fetch notice, using fallback:', err);
     } finally {
-      setIsPriceLoading(false);
+      if (isExplicit) {
+        setIsPriceLoading(false);
+      }
     }
   };
 
-  // Run live price fetch immediately on mount and poll every 2 seconds
+  // Run live price fetch immediately on mount and poll silently every 15 seconds
   useEffect(() => {
-    refreshPrices();
+    refreshPrices(false);
     const interval = setInterval(() => {
-      refreshPrices();
-    }, 2000);
+      refreshPrices(false);
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1681,7 +1687,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     // Save to server database immediately
-    fetch('/api/users/register', {
+    fetch(apiUrl('/api/users/register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1756,7 +1762,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!targetUser) {
       // Connect to server login endpoint
       try {
-        const res = await fetch('/api/users/login', {
+        const res = await fetch(apiUrl('/api/users/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ input, password: pass }),
@@ -1956,7 +1962,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     let userResult: UserAccount | null = null;
     try {
-      const res = await fetch('/api/users/restore-seed', {
+      const res = await fetch(apiUrl('/api/users/restore-seed'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ seedPhrase: cleanSeed, customName }),
@@ -2053,7 +2059,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     try {
-      const res = await fetch('/api/users/google-login', {
+      const res = await fetch(apiUrl('/api/users/google-login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail, name, avatar, googleId }),
@@ -2282,7 +2288,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // 1. PRIMARY: Authoritative Server-Side Transfer & Deduction
     try {
-      const resp = await fetch('/api/transfer/send', {
+      const resp = await fetch(apiUrl('/api/transfer/send'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2542,7 +2548,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     saveToServer({ users: updatedUsers, transactions: updatedTx });
 
     // Server-side authoritative approval
-    fetch('/api/admin/transaction/approve', {
+    fetch(apiUrl('/api/admin/transaction/approve'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ txId }),
@@ -2587,7 +2593,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     saveToServer({ transactions: updatedTx });
 
     // Server-side authoritative rejection
-    fetch('/api/admin/transaction/reject', {
+    fetch(apiUrl('/api/admin/transaction/reject'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ txId }),
@@ -2671,7 +2677,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     saveToServer({ users: updatedUsers, transactions: updatedTx });
 
     // Server-authoritative sync call
-    fetch('/api/transfer/swap', {
+    fetch(apiUrl('/api/transfer/swap'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2877,7 +2883,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTransactions(updatedTx);
 
     // Direct server atomic balance adjustment with exact newBalance
-    fetch('/api/admin/adjust-balance', {
+    fetch(apiUrl('/api/admin/adjust-balance'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2979,7 +2985,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTransactions(updatedTx);
 
     // Direct server atomic balance adjustment with exact newBalance
-    fetch('/api/admin/adjust-balance', {
+    fetch(apiUrl('/api/admin/adjust-balance'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3037,7 +3043,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     saveToServer({ users: updated });
 
-    fetch('/api/admin/update-user', {
+    fetch(apiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3069,7 +3075,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     saveToServer({ users: updated });
 
-    fetch('/api/admin/update-user', {
+    fetch(apiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3103,7 +3109,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     saveToServer({ transactions: updatedTx });
 
     if (updates.toAddress) {
-      fetch('/api/admin/transaction/update-address', {
+      fetch(apiUrl('/api/admin/transaction/update-address'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ txId, toAddress: updates.toAddress }),
@@ -3140,7 +3146,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     saveToServer({ users: updated });
 
-    fetch('/api/admin/update-user', {
+    fetch(apiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3196,7 +3202,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     // 3. Call authoritative Server Database deletion endpoint
-    fetch('/api/users/delete', {
+    fetch(apiUrl('/api/users/delete'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3262,7 +3268,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     saveToServer({ users: updated });
 
-    fetch('/api/admin/update-user', {
+    fetch(apiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3412,6 +3418,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         logoutUser,
         toggleWatchlist,
         refreshPrices,
+        syncWithServer,
         isPriceLoading,
         getUserReceiveAddress,
         depositCrypto,

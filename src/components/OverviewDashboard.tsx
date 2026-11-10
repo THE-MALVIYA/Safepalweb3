@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useWallet } from '../context/WalletContext';
 import { CryptoAsset } from '../types';
 import { CryptoIcon } from './CryptoIcon';
@@ -48,6 +48,9 @@ export const OverviewDashboard: React.FC = () => {
     setIsCameraScannerOpen,
     isMoreMenuOpen,
     setIsMoreMenuOpen,
+    refreshPrices,
+    syncWithServer,
+    isPriceLoading,
   } = useWallet();
 
   const [selectedCoinForDetail, setSelectedCoinForDetail] = useState<CryptoAsset | null>(null);
@@ -60,6 +63,62 @@ export const OverviewDashboard: React.FC = () => {
   const [selectedNetworkFilter, setSelectedNetworkFilter] = useState<string>('All');
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
+
+  // Pull-to-refresh state matching user uploaded screenshot
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const touchStartYRef = useRef<number | null>(null);
+  const isPullingRef = useRef(false);
+
+  const isUpdating = isPullRefreshing;
+
+  const triggerFullRefresh = async () => {
+    if (isPullRefreshing) return;
+    setIsPullRefreshing(true);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate(25);
+      } catch (_) {}
+    }
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      await Promise.all([refreshPrices(true), syncWithServer(), minDelay]);
+    } catch (err) {
+      console.warn('Refresh notice:', err);
+    } finally {
+      setIsPullRefreshing(false);
+      setPullDistance(0);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (typeof window !== 'undefined' && window.scrollY <= 10) {
+      touchStartYRef.current = e.touches[0].clientY;
+      isPullingRef.current = true;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPullingRef.current || touchStartYRef.current === null) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartYRef.current;
+    if (diff > 0 && typeof window !== 'undefined' && window.scrollY <= 10) {
+      const resistance = Math.min(diff * 0.4, 65);
+      setPullDistance(resistance);
+    } else {
+      setPullDistance(0);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pullDistance > 32 && !isUpdating) {
+      triggerFullRefresh();
+    } else {
+      setPullDistance(0);
+    }
+    touchStartYRef.current = null;
+    isPullingRef.current = false;
+  };
 
   const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(() => {
     return localStorage.getItem('safepal_hide_balance') === 'true';
@@ -98,7 +157,7 @@ export const OverviewDashboard: React.FC = () => {
       displayName = 'USDT (TRC20)';
       networkTag = 'TRC20';
     } else if (asset.symbol === 'TRX') {
-      displayName = 'TRX (TRON)';
+      displayName = 'TRX';
       networkTag = 'TRON';
     } else if (asset.symbol === 'GAS_TRX') {
       displayName = 'GAS (Gas fee TRX)';
@@ -153,12 +212,18 @@ export const OverviewDashboard: React.FC = () => {
   // 9. SOL (Solana)
   // 10. NEAR (NEAR)
   // 11. DOGE, ADA, AVAX, POL, XRP
+  // Custom priority order matching SafePal screenshot (photo_2026-11-11_03-03-32_2514e884.jpg):
+  // 1. USDT (TRC20)
+  // 2. TRX
+  // 3. BNB (BEP20)
+  // 4. BTC (Bitcoin)
+  // 5. ETH (ERC20)
   const prioritySymbols = [
+    'USDT',
+    'TRX',
     'BNB',
     'BTC',
     'ETH',
-    'USDT',
-    'TRX',
     'GAS_TRX',
     'SOL',
     'NEAR',
@@ -210,6 +275,17 @@ export const OverviewDashboard: React.FC = () => {
       return matchesSearch && matchesNetwork;
     })
     .sort((a, b) => {
+      const aBalUsd = (currentUser?.balances?.[a.symbol] || 0) * a.priceUsd;
+      const bBalUsd = (currentUser?.balances?.[b.symbol] || 0) * b.priceUsd;
+
+      // 1. Both have positive balance -> coin with higher balance is at top
+      if (aBalUsd > 0 && bBalUsd > 0) {
+        return bBalUsd - aBalUsd;
+      }
+      // 2. Positive balance tokens always show before 0-balance tokens
+      if (aBalUsd > 0 && bBalUsd <= 0) return -1;
+      if (bBalUsd > 0 && aBalUsd <= 0) return 1;
+
       const aIdx = prioritySymbols.indexOf(a.symbol);
       const bIdx = prioritySymbols.indexOf(b.symbol);
 
@@ -240,7 +316,12 @@ export const OverviewDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0D] text-white pb-24 pt-2 select-none font-sans">
+    <div
+      className="min-h-screen bg-[#0A0A0D] text-white pb-24 pt-2 select-none font-sans"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="mx-auto max-w-md px-4 sm:px-5">
         {/* ================= 1. SAFE PAL TOP APP BAR ================= */}
         {/* Left: [ Hexagon Settings ⚙ ] [ Bell 🔔 ], Center: [ Wallet01-H1W ▾ ❐ ], Right: [ Scan ⛶ ] */}
@@ -348,7 +429,13 @@ export const OverviewDashboard: React.FC = () => {
         {/* ================= 2. THREE TABS: Coin | Earn | NFT ================= */}
         <div className="flex items-center justify-around mt-3 border-b border-white/[0.06]">
           <button
-            onClick={() => setActiveTopTab('Coin')}
+            onClick={() => {
+              if (activeTopTab === 'Coin') {
+                triggerFullRefresh();
+              } else {
+                setActiveTopTab('Coin');
+              }
+            }}
             className={`flex-1 text-center pb-2.5 transition-all cursor-pointer relative ${
               activeTopTab === 'Coin'
                 ? 'text-white font-bold text-[17px]'
@@ -396,9 +483,42 @@ export const OverviewDashboard: React.FC = () => {
           </button>
         </div>
 
+        {/* ================= REFRESH / UPDATING INDICATOR ================= */}
+        {/* Exact match to user uploaded screenshot: photo_2026-11-11_03-03-32_2514e884.jpg */}
+        {/* Placed right below tabs and right above Balance */}
+        <div
+          onClick={triggerFullRefresh}
+          className={`w-full flex items-center justify-center transition-all duration-300 overflow-hidden cursor-pointer select-none ${
+            isUpdating || pullDistance > 0
+              ? 'py-3 opacity-100 max-h-16'
+              : 'max-h-0 py-0 opacity-0 pointer-events-none'
+          }`}
+          title="Click to refresh balances and prices"
+        >
+          <div className="flex items-center justify-center gap-2.5 text-[#8E92A4]">
+            {/* Spinning Arc / Ring Spinner matching screenshot */}
+            <svg
+              className={`h-5 w-5 text-[#8E92A4] ${isUpdating ? 'animate-spin' : ''}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              style={{
+                transform: !isUpdating && pullDistance > 0 ? `rotate(${pullDistance * 6}deg)` : undefined,
+              }}
+            >
+              <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" />
+              <path
+                className="opacity-90"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <span className="text-[14px] font-normal tracking-wide text-[#8E92A4]">Updating...</span>
+          </div>
+        </div>
+
         {/* ================= 3. BALANCE SECTION ================= */}
-        {/* Exact match to user uploaded screenshot: photo_2026-10-20_06-42-34_12bde185.jpg */}
-        <div className="text-center py-5 flex flex-col items-center justify-center">
+        {/* Exact match to user uploaded screenshot: photo_2026-11-11_03-03-32_2514e884.jpg */}
+        <div className="text-center py-4 flex flex-col items-center justify-center">
           {/* Top: "Balance" label with Eye Toggle */}
           <div
             onClick={toggleBalanceVisibility}
@@ -412,10 +532,10 @@ export const OverviewDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Middle: Clean "$0" or converted fiat */}
+          {/* Middle: Clean "$0" or converted fiat - Natural sleek normal weight matching SafePal screenshot */}
           <div
             onClick={toggleBalanceVisibility}
-            className="text-[52px] sm:text-[56px] font-semibold text-white tracking-tight leading-tight my-1 cursor-pointer select-none"
+            className="text-[32px] sm:text-[34px] font-normal text-white tracking-tight leading-tight my-1 cursor-pointer select-none font-sans"
           >
             {isBalanceHidden
               ? '••••'
@@ -425,13 +545,24 @@ export const OverviewDashboard: React.FC = () => {
           </div>
 
           {/* Bottom: "0 BTC" */}
-          <div className="text-[15px] font-normal text-[#8E92A4]">
+          <div className="text-[13px] font-normal text-[#8E92A4] mt-0.5 font-mono">
             {isBalanceHidden
               ? '•••• BTC'
-              : computedBtcEquivalent === 0
+              : computedTotalUsd <= 0
               ? '0 BTC'
-              : `${computedBtcEquivalent.toFixed(6)} BTC`}
+              : `${computedBtcEquivalent.toFixed(7)} BTC`}
           </div>
+
+          {/* Today Gain/Loss: Only show when user has actual balance (Clean fresh wallet on 0 balance) */}
+          {computedTotalUsd > 0 && !isBalanceHidden && (
+            <div className="flex items-center justify-center gap-1.5 text-[12.5px] font-medium mt-1 select-none">
+              <span className="text-[#8E92A4]">Today</span>
+              <span className="text-[#00D084] font-medium font-mono">+$0</span>
+              <span className="text-[#00D084] font-medium font-mono flex items-center gap-0.5">
+                <span>▲</span>11.9%
+              </span>
+            </div>
+          )}
         </div>
 
         {/* ================= 4. FIVE CIRCULAR ACTION BUTTONS ================= */}
@@ -443,7 +574,7 @@ export const OverviewDashboard: React.FC = () => {
             className="flex flex-col items-center group cursor-pointer focus:outline-none"
             id="safepal-btn-send"
           >
-            <div className="w-12 h-12 rounded-full bg-[#1C1F2B] hover:bg-[#282C3D] text-white flex items-center justify-center transition-transform active:scale-95">
+            <div className="w-12 h-12 rounded-full bg-[#181A22] hover:bg-[#222530] border border-white/[0.07] text-white flex items-center justify-center transition-all duration-150 active:scale-95 shadow-sm">
               <ArrowUp className="h-5 w-5 stroke-[2]" />
             </div>
             <span className="text-[12px] font-normal text-[#8E92A4] group-hover:text-white mt-1.5 transition-colors">
@@ -457,7 +588,7 @@ export const OverviewDashboard: React.FC = () => {
             className="flex flex-col items-center group cursor-pointer focus:outline-none"
             id="safepal-btn-receive"
           >
-            <div className="w-12 h-12 rounded-full bg-[#1C1F2B] hover:bg-[#282C3D] text-white flex items-center justify-center transition-transform active:scale-95">
+            <div className="w-12 h-12 rounded-full bg-[#181A22] hover:bg-[#222530] border border-white/[0.07] text-white flex items-center justify-center transition-all duration-150 active:scale-95 shadow-sm">
               <ArrowDown className="h-5 w-5 stroke-[2]" />
             </div>
             <span className="text-[12px] font-normal text-[#8E92A4] group-hover:text-white mt-1.5 transition-colors">
@@ -471,7 +602,7 @@ export const OverviewDashboard: React.FC = () => {
             className="flex flex-col items-center group cursor-pointer focus:outline-none"
             id="safepal-btn-buy"
           >
-            <div className="w-12 h-12 rounded-full bg-[#1C1F2B] hover:bg-[#282C3D] text-white flex items-center justify-center transition-transform active:scale-95">
+            <div className="w-12 h-12 rounded-full bg-[#181A22] hover:bg-[#222530] border border-white/[0.07] text-white flex items-center justify-center transition-all duration-150 active:scale-95 shadow-sm">
               <CreditCard className="h-5 w-5 stroke-[1.8]" />
             </div>
             <span className="text-[12px] font-normal text-[#8E92A4] group-hover:text-white mt-1.5 transition-colors">
@@ -485,7 +616,7 @@ export const OverviewDashboard: React.FC = () => {
             className="flex flex-col items-center group cursor-pointer focus:outline-none"
             id="safepal-btn-gas"
           >
-            <div className="w-12 h-12 rounded-full bg-[#1C1F2B] hover:bg-[#282C3D] text-white flex items-center justify-center transition-transform active:scale-95">
+            <div className="w-12 h-12 rounded-full bg-[#181A22] hover:bg-[#222530] border border-white/[0.07] text-white flex items-center justify-center transition-all duration-150 active:scale-95 shadow-sm">
               <Fuel className="h-5 w-5 stroke-[1.8]" />
             </div>
             <span className="text-[12px] font-normal text-[#8E92A4] group-hover:text-white mt-1.5 transition-colors">
@@ -499,7 +630,7 @@ export const OverviewDashboard: React.FC = () => {
             className="flex flex-col items-center group cursor-pointer focus:outline-none"
             id="safepal-btn-more"
           >
-            <div className="w-12 h-12 rounded-full bg-[#1C1F2B] hover:bg-[#282C3D] text-white flex items-center justify-center transition-transform active:scale-95">
+            <div className="w-12 h-12 rounded-full bg-[#181A22] hover:bg-[#222530] border border-white/[0.07] text-white flex items-center justify-center transition-all duration-150 active:scale-95 shadow-sm">
               <MoreVertical className="h-5 w-5 stroke-[1.8]" />
             </div>
             <span className="text-[12px] font-normal text-[#8E92A4] group-hover:text-white mt-1.5 transition-colors">
@@ -512,14 +643,14 @@ export const OverviewDashboard: React.FC = () => {
         {/* [ 🔍 Search ]  [ All ▾ ]  [ ⫶ ] */}
         <div className="flex items-center gap-2 my-4 relative">
           {/* Search Input Box */}
-          <div className="flex-1 bg-[#18181C] rounded-xl px-3.5 py-2.5 flex items-center gap-2">
+          <div className="flex-1 bg-[#14151B] border border-white/[0.06] rounded-xl px-3.5 py-2.5 flex items-center gap-2 shadow-inner">
             <Search className="h-4 w-4 text-[#60616C] shrink-0" />
             <input
               type="text"
               placeholder="Search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent text-[14px] text-white placeholder-[#60616C] focus:outline-none w-full"
+              className="bg-transparent text-[14px] text-white placeholder-[#60616C] focus:outline-none w-full font-normal"
             />
             {searchQuery && (
               <button
@@ -535,7 +666,7 @@ export const OverviewDashboard: React.FC = () => {
           <div className="relative">
             <button
               onClick={() => setIsFilterDropdownOpen((prev) => !prev)}
-              className="bg-[#18181C] hover:bg-[#202026] text-white text-[13px] font-medium px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="bg-[#14151B] border border-white/[0.06] hover:bg-[#1C1E26] text-white text-[13px] font-medium px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
             >
               <span>{selectedNetworkFilter}</span>
               <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
@@ -543,7 +674,7 @@ export const OverviewDashboard: React.FC = () => {
 
             {/* Dropdown Menu */}
             {isFilterDropdownOpen && (
-              <div className="absolute right-0 top-12 z-30 w-36 rounded-xl bg-[#202127] border border-white/10 p-1.5 shadow-2xl">
+              <div className="absolute right-0 top-12 z-30 w-36 rounded-xl bg-[#1C1D24] border border-white/10 p-1.5 shadow-2xl">
                 {['All', 'BEP20', 'BTC', 'ERC20', 'Arbitrum', 'Base', 'TRON', 'SOL'].map((net) => (
                   <button
                     key={net}
@@ -567,7 +698,7 @@ export const OverviewDashboard: React.FC = () => {
           {/* 3 Dots Menu Button for Token Management */}
           <button
             onClick={() => setIsTokenSearchOpen(true)}
-            className="bg-[#18181C] hover:bg-[#202026] text-[#8F909A] hover:text-white h-10 w-10 rounded-xl flex items-center justify-center transition-colors cursor-pointer"
+            className="bg-[#14151B] border border-white/[0.06] hover:bg-[#1C1E26] text-[#8F909A] hover:text-white h-10 w-10 rounded-xl flex items-center justify-center transition-colors cursor-pointer shadow-sm"
             title="Manage Tokens"
           >
             <MoreVertical className="h-4 w-4" />
@@ -592,7 +723,7 @@ export const OverviewDashboard: React.FC = () => {
               <div
                 key={asset.id}
                 onClick={() => setSelectedCoinForDetail(asset)}
-                className="bg-[#18181C] hover:bg-[#1E1E24] rounded-2xl p-4 flex items-center justify-between transition-colors cursor-pointer active:scale-[0.99] border border-transparent hover:border-white/[0.04]"
+                className="bg-[#14151B] hover:bg-[#1A1C23] rounded-2xl p-4 flex items-center justify-between transition-all duration-150 cursor-pointer active:scale-[0.99] border border-white/[0.04] hover:border-white/[0.08] shadow-sm"
                 id={`safepal-coin-${asset.id}`}
               >
                 {/* Left: Coin Icon + Coin Name & Price */}
@@ -608,29 +739,31 @@ export const OverviewDashboard: React.FC = () => {
                   </div>
 
                   <div className="min-w-0">
-                    {/* Coin Name with Network: e.g. BNB (BEP20), BTC (Bitcoin), ETH (ERC20) */}
-                    <div className="text-[15px] font-semibold text-white truncate">
+                    {/* Coin Name with Network: e.g. BNB (BEP20), BTC (Bitcoin), ETH (ERC20) - Normal font matching SafePal */}
+                    <div className="text-[15px] font-normal text-white truncate">
                       {displayName}
                     </div>
 
                     {/* Unit Price and 24h Change % */}
                     <div className="flex items-center gap-1.5 text-[13px] mt-0.5">
-                      <span className="text-white font-mono">{formattedPrice}</span>
-                      <span
-                        className={`font-mono font-medium ${
-                          isNegative ? 'text-[#FF5252]' : 'text-[#00D084]'
-                        }`}
-                      >
-                        {changeStr}
-                      </span>
+                      <span className="text-[#8E92A4] font-normal">{formattedPrice}</span>
+                      {asset.symbol !== 'USDT' && Math.abs(asset.change24h) >= 0.01 && (
+                        <span
+                          className={`font-mono font-normal ${
+                            isNegative ? 'text-[#FF5252]' : 'text-[#00D084]'
+                          }`}
+                        >
+                          {changeStr}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Right: Holding Balance Quantity (Top) & USD Value (Bottom) */}
+                {/* Right: Holding Balance Quantity (Top) & USD Value (Bottom) - Normal font matching SafePal */}
                 <div className="text-right shrink-0">
-                  {/* Balance Quantity: 0 */}
-                  <div className="text-[16px] font-semibold text-white font-mono">
+                  {/* Balance Quantity: Normal sleek font */}
+                  <div className="text-[16px] font-normal text-white font-mono tracking-tight">
                     {isBalanceHidden
                       ? '••••'
                       : userBal === 0
@@ -641,7 +774,7 @@ export const OverviewDashboard: React.FC = () => {
                   </div>
 
                   {/* USD / Fiat Value */}
-                  <div className="text-[13px] text-[#7C7D86] font-mono mt-0.5">
+                  <div className="text-[13px] text-[#7C7D86] font-normal mt-0.5">
                     {isBalanceHidden
                       ? '••••'
                       : usdVal === 0

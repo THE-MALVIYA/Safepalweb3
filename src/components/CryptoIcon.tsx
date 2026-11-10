@@ -11,9 +11,89 @@ export interface CryptoIconProps {
   showBadge?: boolean;
 }
 
+// Exact SafePal Faceted Emerald Diamond USDT Icon matching user screenshot
+export const UsdtDiamondIcon: React.FC<{ className?: string }> = ({ className = 'h-full w-full' }) => (
+  <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="usdtTopTable" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stopColor="#34E8B8" />
+        <stop offset="100%" stopColor="#1CCF9E" />
+      </linearGradient>
+      <linearGradient id="usdtUpperLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#28DCAE" />
+        <stop offset="100%" stopColor="#0EB88D" />
+      </linearGradient>
+      <linearGradient id="usdtUpperRight" x1="100%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stopColor="#20D4A6" />
+        <stop offset="100%" stopColor="#09A67D" />
+      </linearGradient>
+      <linearGradient id="usdtCenterBody" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stopColor="#16C295" />
+        <stop offset="100%" stopColor="#00936E" />
+      </linearGradient>
+      <linearGradient id="usdtLowerLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#0EB88D" />
+        <stop offset="100%" stopColor="#00805F" />
+      </linearGradient>
+      <linearGradient id="usdtLowerRight" x1="100%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stopColor="#09A67D" />
+        <stop offset="100%" stopColor="#007254" />
+      </linearGradient>
+      <filter id="usdtDropShadow" x="-10%" y="-10%" width="120%" height="120%">
+        <feDropShadow dx="0" dy="1.2" stdDeviation="1.5" floodColor="#000000" floodOpacity="0.45" />
+      </filter>
+    </defs>
+
+    <g filter="url(#usdtDropShadow)">
+      {/* Top Table Facet */}
+      <polygon points="25,12 75,12 64,32 36,32" fill="url(#usdtTopTable)" />
+      {/* Top Left Facet */}
+      <polygon points="25,12 36,32 8,36" fill="url(#usdtUpperLeft)" />
+      {/* Top Right Facet */}
+      <polygon points="75,12 92,36 64,32" fill="url(#usdtUpperRight)" />
+      {/* Center Body Facet */}
+      <polygon points="36,32 64,32 50,90" fill="url(#usdtCenterBody)" />
+      {/* Lower Left Facet */}
+      <polygon points="8,36 36,32 50,90" fill="url(#usdtLowerLeft)" />
+      {/* Lower Right Facet */}
+      <polygon points="92,36 64,32 50,90" fill="url(#usdtLowerRight)" />
+
+      {/* 3D Highlight & Facet Crease Lines */}
+      <line x1="25" y1="12" x2="75" y2="12" stroke="white" strokeOpacity="0.55" strokeWidth="0.8" />
+      <line x1="25" y1="12" x2="8" y2="36" stroke="white" strokeOpacity="0.4" strokeWidth="0.8" />
+      <line x1="75" y1="12" x2="92" y2="36" stroke="white" strokeOpacity="0.3" strokeWidth="0.8" />
+      <line x1="36" y1="32" x2="64" y2="32" stroke="white" strokeOpacity="0.3" strokeWidth="0.7" />
+      <line x1="36" y1="32" x2="50" y2="90" stroke="white" strokeOpacity="0.35" strokeWidth="0.7" />
+      <line x1="64" y1="32" x2="50" y2="90" stroke="black" strokeOpacity="0.2" strokeWidth="0.7" />
+    </g>
+
+    {/* Center Official Tether Emblem in pure white */}
+    <g transform="translate(18, 16) scale(2.0)">
+      <path
+        d="M17.922 17.383v-.002c-.11.008-.677.042-1.942.042-1.01 0-1.721-.03-1.971-.042v.003C9.914 17.15 6.5 15.65 6.5 13.84c0-1.81 3.414-3.31 7.509-3.543v2.81c.25.012.961.042 1.971.042 1.265 0 1.832-.034 1.942-.042v-2.81c4.095.233 7.509 1.733 7.509 3.543zm0-8.916V5.5h-3.913v2.967C7.683 8.742 3 10.967 3 13.84c0 2.873 4.683 5.098 11.009 5.373v7.287h3.913v-7.287c6.326-.275 11.009-2.5 11.009-5.373 0-2.873-4.683-5.098-11.009-5.373z"
+        fill="#FFFFFF"
+      />
+    </g>
+  </svg>
+);
+
+// Official TRON (TRX) Geometric Logo matching SafePal screenshot
+export const TronLogo: React.FC<{ className?: string }> = ({ className = 'h-full w-full' }) => (
+  <svg viewBox="0 0 201 193" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M100.8 192.148C156.049 192.148 200.8 149.236 200.8 96.3238C200.8 43.4119 156.049 0.5 100.8 0.5C45.551 0.5 0.800003 43.4119 0.800003 96.3238C0.800003 149.236 45.5893 192.148 100.8 192.148Z"
+      fill="#FF060A"
+    />
+    <path
+      d="M157.045 79.1207C151.528 74.2165 143.865 66.7452 137.658 61.4579L137.275 61.228C136.662 60.7682 135.972 60.3851 135.244 60.1169C120.225 57.4349 50.3402 44.9061 48.9992 45.0594C48.6161 45.0977 48.2329 45.251 47.9264 45.4425L47.5816 45.7107C47.1602 46.1322 46.8153 46.6303 46.6238 47.205L46.5471 47.4349V48.6992V48.8908C54.4015 69.887 85.4743 138.623 91.6046 154.791C91.9877 155.902 92.6774 157.971 93.9801 158.086H94.2866C94.9762 158.086 97.9648 154.293 97.9648 154.293C97.9648 154.293 151.336 92.3008 156.739 85.7107C157.428 84.9061 158.041 84.0249 158.578 83.1054C158.731 82.3774 158.654 81.6494 158.386 80.9598C158.118 80.2701 157.62 79.6188 157.045 79.1207ZM111.605 86.3621L134.363 68.2778L147.735 80.0786L111.605 86.3621ZM102.754 85.1743L63.5586 54.3697L127.007 65.5958L102.754 85.1743ZM106.279 93.2203L146.394 87.0134L100.532 140.002L106.279 93.2203ZM58.233 57.4732L99.4973 90.9981L93.5203 140.04L58.233 57.4732Z"
+      fill="#FFFFFF"
+    />
+  </svg>
+);
+
 // Official High-Resolution Verified Logos (CoinGecko + SafePal / Multi-Chain CDN)
 const OFFICIAL_ICON_URLS: Record<string, string> = {
-  USDT: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/tron/assets/TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t/logo.png',
+  USDT: '/assets/usdt-trc20.png',
   BTC: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
   ETH: 'https://assets.coingecko.com/coins/images/279/large/ethereum.png',
   BNB: 'https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png',
@@ -343,13 +423,10 @@ export const CryptoIcon: React.FC<CryptoIconProps> = ({
     if (inferredBadge === 'TRC20' || inferredBadge === 'TRON') {
       return (
         <div
-          className={`absolute ${badgeSizeClasses} flex items-center justify-center rounded-full bg-[#FF0013] text-white shadow-lg z-10 p-[1.5px]`}
+          className={`absolute ${badgeSizeClasses} flex items-center justify-center rounded-full bg-[#FF060A] ring-2 ring-[#0A0A0D] shadow-lg z-10 overflow-hidden`}
           title="TRON Network (TRC-20)"
         >
-          <svg viewBox="0 0 100 100" className="h-full w-full fill-white">
-            <polygon points="50,12 88,32 78,88 50,78 22,88 12,32" fill="none" stroke="white" strokeWidth="6" />
-            <polygon points="50,22 75,78 25,78" fill="white" />
-          </svg>
+          <TronLogo />
         </div>
       );
     }
@@ -445,7 +522,7 @@ export const CryptoIcon: React.FC<CryptoIconProps> = ({
     return null;
   };
 
-  // Exact SafePal USDT TRC20 Icon (Official Circular Tether Logo + Red TRON Network Badge)
+  // Exact SafePal USDT TRC20 Icon (Master 4K HD Faceted Emerald Diamond + 3D Red TRON Badge matching user screenshot)
   if (
     uppercaseSym === 'USDT' &&
     (inferredBadge === 'TRC20' ||
@@ -457,47 +534,29 @@ export const CryptoIcon: React.FC<CryptoIconProps> = ({
   ) {
     return (
       <div className={`relative inline-flex shrink-0 items-center justify-center ${dimensionClasses} ${className}`}>
-        {/* 1. Main Circular Tether Logo matching SafePal */}
-        {!usdtImgError ? (
-          <img
-            src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/tron/assets/TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t/logo.png"
-            alt="USDT TRC20"
-            onError={() => setUsdtImgError(true)}
-            className="h-full w-full rounded-full object-cover shadow-sm bg-[#009393]"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center rounded-full bg-[#009393] text-white shadow-sm overflow-hidden p-1.5">
-            <svg viewBox="0 0 32 32" className="h-full w-full fill-white">
-              <path d="M17.922 17.383v-.002c-.11.008-.677.042-1.942.042-1.01 0-1.721-.03-1.971-.042v.003C9.914 17.15 6.5 15.65 6.5 13.84c0-1.81 3.414-3.31 7.509-3.543v2.81c.25.012.961.042 1.971.042 1.265 0 1.832-.034 1.942-.042v-2.81c4.095.233 7.509 1.733 7.509 3.543zm0-8.916V5.5h-3.913v2.967C7.683 8.742 3 10.967 3 13.84c0 2.873 4.683 5.098 11.009 5.373v7.287h3.913v-7.287c6.326-.275 11.009-2.5 11.009-5.373 0-2.873-4.683-5.098-11.009-5.373z" />
-            </svg>
-          </div>
-        )}
+        <img
+          src="/assets/usdt-trc20.png"
+          alt="USDT (TRC20)"
+          className="h-full w-full object-contain select-none pointer-events-none drop-shadow-sm"
+          loading="eager"
+          onError={(e) => {
+            const target = e.currentTarget as HTMLImageElement;
+            if (!target.src.includes('photo_2026-11-11_03-30-17_5439d205.jpg')) {
+              target.src = '/assets/aistudio/photo_2026-11-11_03-30-17_5439d205.jpg';
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
-        {/* 2. Overlapping Crimson Red TRON Network Badge at Bottom-Right */}
-        {showBadge && (
-          <div
-            className={`absolute ${badgeSizeClasses} rounded-full bg-[#FF0013] ring-2 ring-[#18181C] flex items-center justify-center shadow-md overflow-hidden z-10 shrink-0`}
-            title="TRC20 (TRON)"
-          >
-            {!tronBadgeError ? (
-              <img
-                src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/tron/info/logo.png"
-                alt="TRC20"
-                onError={() => setTronBadgeError(true)}
-                className="h-full w-full object-cover rounded-full"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <svg viewBox="0 0 100 100" className="h-full w-full fill-white p-[2px]">
-                <polygon points="50,12 88,32 78,88 50,78 22,88 12,32" fill="none" stroke="white" strokeWidth="6" />
-                <polygon points="50,22 75,78 25,78" fill="white" />
-              </svg>
-            )}
-          </div>
-        )}
+  // Exact TRX / GAS_TRX Icon (Official Red TRON Logo matching screenshot)
+  if (uppercaseSym === 'TRX' || uppercaseSym === 'GAS_TRX') {
+    return (
+      <div className={`relative inline-flex shrink-0 items-center justify-center ${dimensionClasses} ${className}`}>
+        <div className="h-full w-full rounded-full overflow-hidden shadow-sm flex items-center justify-center">
+          <TronLogo />
+        </div>
       </div>
     );
   }
